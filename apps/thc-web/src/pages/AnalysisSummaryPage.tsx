@@ -202,7 +202,7 @@ export default function AnalysisSummaryPage() {
           <img src="/chunks-logo.png" alt="Chunks" className="chunks-logo summary-logo" />
           <div>
             <p className="page-kicker">Round summary</p>
-            <h1 className="page-title">Chunks Circle</h1>
+            <h1 className="page-title">CC FACE OFF</h1>
           </div>
         </div>
       </header>

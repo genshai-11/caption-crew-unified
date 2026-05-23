@@ -72,7 +72,7 @@ export default function GamePage() {
           <img src="/chunks-logo.png" alt="Chunks" className="chunks-logo" />
           <div>
             <p className="game-kicker">Caption & Crew</p>
-            <h1 className="game-title">Chunks Circle</h1>
+            <h1 className="game-title">CC FACE OFF</h1>
           </div>
         </div>
         {round.feedbackError && round.state !== 'results' && round.state !== 'crew-timeout' && <p className="game-error">{round.feedbackError}</p>}
