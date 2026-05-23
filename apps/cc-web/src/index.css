@@ -472,10 +472,19 @@ input:focus, select:focus {
   gap: 4px;
 }
 .analysis-score {
+  display: inline-flex;
+  align-items: flex-start;
   font-size: clamp(56px, 12vw, 96px);
   line-height: 0.95;
   font-weight: 500;
   letter-spacing: -0.05em;
+}
+.analysis-score-unit {
+  margin-left: 0.08em;
+  font-size: 0.42em;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  transform: translateY(0.12em);
 }
 .analysis-caption { color: var(--muted); font-size: 15px; }
 .analysis-metrics, .history-metric-row {

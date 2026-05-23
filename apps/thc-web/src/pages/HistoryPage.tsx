@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { loadRecentRounds } from '@/services/roundRepository';
 import { RoundRecord } from '@/types';
 
+function formatScorePercent(score?: number | null) {
+  const numeric = Number(score ?? 0);
+  if (!Number.isFinite(numeric)) return '0%';
+  return `${Math.max(0, Math.min(100, Math.round(numeric)))}%`;
+}
+
 function DetailList({ title, items }: { title: string; items?: string[] }) {
   if (!items?.length) return null;
 
@@ -74,7 +80,7 @@ function HistoryCard({ round }: { round: RoundRecord }) {
       <div className="history-metric-row history-metric-row-compact">
         <div>
           <span className="metric-label">meaning</span>
-          <span className="metric-value">{round.evaluation?.matchScore ?? 0}</span>
+          <span className="metric-value">{formatScorePercent(round.evaluation?.matchScore)}</span>
         </div>
         <div>
           <span className="metric-label">delay</span>

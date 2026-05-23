@@ -6,6 +6,12 @@ interface ResultCardProps {
   onReset: () => void;
 }
 
+function formatScorePercent(score?: number | null) {
+  const numeric = Number(score ?? 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.min(100, Math.round(numeric)));
+}
+
 function DetailList({ title, items }: { title: string; items?: string[] }) {
   if (!items?.length) return null;
 
@@ -26,6 +32,8 @@ export function ResultCard({ evaluation, reactionDelayMs, onReset }: ResultCardP
     return null;
   }
 
+  const scorePercent = formatScorePercent(evaluation.matchScore);
+
   return (
     <section className="analysis-card">
       <div className="analysis-topline">
@@ -34,8 +42,10 @@ export function ResultCard({ evaluation, reactionDelayMs, onReset }: ResultCardP
       </div>
 
       <div className="analysis-score-block">
-        <div className="analysis-score">{evaluation.matchScore}</div>
-        <div className="analysis-caption">meaning match</div>
+        <div className="analysis-score" aria-label={`meaning match ${scorePercent} percent`}>
+          <span>{scorePercent}</span><span className="analysis-score-unit">%</span>
+        </div>
+        <div className="analysis-caption">meaning match · 100% scale</div>
       </div>
 
       <div className="analysis-metrics">
