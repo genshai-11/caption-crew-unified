@@ -17,7 +17,10 @@ export interface AdminRuntimeConfig {
   thirdPartyTranscriptApiKey: string;
   thirdPartyTranscriptModel: string;
   thirdPartyTranscriptAuthScheme: 'none' | 'bearer' | 'x-api-key';
-  ohmAnalysisProvider: 'router9';
+  ohmAnalysisProvider: 'router9' | 'cvr-measure';
+  cvrMeasureBaseUrl: string;
+  cvrMeasureApiKey: string;
+  cvrMeasureTimeoutMs: number;
   thirdPartyOhmUrl: string;
   thirdPartyOhmApiKey: string;
   thirdPartyOhmModel: string;
@@ -29,6 +32,8 @@ export interface AdminRuntimeConfig {
   router9FallbackModel: string;
   ohmModel: string;
   ohmFallbackModel: string;
+  ohmAgentEnabled: boolean;
+  ohmAgentShadowMode: boolean;
   meaningStrictness: 'loose' | 'medium' | 'strict';
   meaningWeight: number;
   feedbackEnabled: boolean;
@@ -61,7 +66,10 @@ export const defaultAdminRuntimeConfig: AdminRuntimeConfig = {
   thirdPartyTranscriptApiKey: '',
   thirdPartyTranscriptModel: '',
   thirdPartyTranscriptAuthScheme: 'bearer',
-  ohmAnalysisProvider: 'router9',
+  ohmAnalysisProvider: 'cvr-measure',
+  cvrMeasureBaseUrl: 'https://chunks-cvr-api-781691010426.asia-southeast1.run.app',
+  cvrMeasureApiKey: '',
+  cvrMeasureTimeoutMs: 15000,
   thirdPartyOhmUrl: 'https://ais-dev-msgfyvxutdkvwq3bz4qbhr-148630698694.asia-southeast1.run.app/api/analyze-ohm',
   thirdPartyOhmApiKey: '',
   thirdPartyOhmModel: '',
@@ -73,6 +81,8 @@ export const defaultAdminRuntimeConfig: AdminRuntimeConfig = {
   router9FallbackModel: '',
   ohmModel: '',
   ohmFallbackModel: '',
+  ohmAgentEnabled: false,
+  ohmAgentShadowMode: true,
   meaningStrictness: 'medium',
   meaningWeight: 100,
   feedbackEnabled: true,
@@ -105,6 +115,12 @@ function normalizeAdminConfig(raw?: Partial<AdminRuntimeConfig> | null): AdminRu
         ? 'thirdparty'
         : 'deepgram',
     partialTranscriptEnabled: raw?.partialTranscriptEnabled === true,
+    ohmAnalysisProvider: raw?.ohmAnalysisProvider === 'router9' ? 'router9' : 'cvr-measure',
+    cvrMeasureBaseUrl: String(raw?.cvrMeasureBaseUrl || defaultAdminRuntimeConfig.cvrMeasureBaseUrl),
+    cvrMeasureApiKey: String(raw?.cvrMeasureApiKey || defaultAdminRuntimeConfig.cvrMeasureApiKey),
+    cvrMeasureTimeoutMs: Number(raw?.cvrMeasureTimeoutMs || defaultAdminRuntimeConfig.cvrMeasureTimeoutMs),
+    ohmAgentEnabled: raw?.ohmAgentEnabled === true,
+    ohmAgentShadowMode: raw?.ohmAgentShadowMode !== false,
     visualTheme: normalizeVisualTheme(raw?.visualTheme || defaultAdminRuntimeConfig.visualTheme),
   };
 }

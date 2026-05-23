@@ -82,7 +82,7 @@ export default function GamePage() {
         <RolePanel
           role="captain"
           title="Captain"
-          color="blue"
+          color="red"
           recording={round.captainRecorder.isRecording}
           active={round.state === 'captain-ready' || round.state === 'captain-recording'}
           disabled={!round.canStartCaptain}
@@ -97,7 +97,7 @@ export default function GamePage() {
         <RolePanel
           role="crew"
           title="Crew"
-          color="red"
+          color="blue"
           recording={round.crewRecorder.isRecording}
           active={round.state === 'crew-waiting' || round.state === 'crew-recording' || round.state === 'crew-processing' || round.state === 'evaluating'}
           disabled={!round.canStartCrew}

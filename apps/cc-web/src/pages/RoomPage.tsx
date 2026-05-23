@@ -200,13 +200,13 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
         <section className="soft-card admin-section-minimal" style={{ padding: 16 }}>
           <div className="action-row" style={{ justifyContent: 'space-between' }}>
             <div>
-              <span className="soft-label">Captain</span>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>{(room.captainName || '—')}</div>
+              <span className="soft-label" style={{ color: 'var(--red)' }}>Captain</span>
+              <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--red)' }}>{(room.captainName || '—')}</div>
             </div>
             <div style={{ fontSize: 20, fontWeight: 800 }}>{Number(room.captainScore || 0)} : {Number(room.crewScore || 0)}</div>
             <div style={{ textAlign: 'right' }}>
-              <span className="soft-label">Crew</span>
-              <div style={{ fontSize: 16, fontWeight: 600 }}>{(room.crewName || '—')}</div>
+              <span className="soft-label" style={{ color: 'var(--blue)' }}>Crew</span>
+              <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--blue)' }}>{(room.crewName || '—')}</div>
             </div>
           </div>
         </section>
@@ -305,7 +305,7 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
               <RolePanel
                 role="captain"
                 title="Captain"
-                color="blue"
+                color="red"
                 recording={game.captainRecorder.isRecording}
                 active={currentRound.status === 'captain_speaking'}
                 disabled={!game.canStartCaptain}
@@ -320,7 +320,7 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
               <RolePanel
                 role="crew"
                 title="Crew"
-                color="red"
+                color="blue"
                 recording={game.crewRecorder.isRecording}
                 active={currentRound.status === 'crew_speaking' || currentRound.status === 'evaluating'}
                 disabled={!game.canStartCrew}
