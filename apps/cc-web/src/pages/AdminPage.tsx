@@ -393,6 +393,7 @@ export default function AdminPage() {
             <select value={config.visualTheme} onChange={(e) => patchConfig('visualTheme', e.target.value as AdminRuntimeConfig['visualTheme'])}>
               <option value="minimal">Minimal</option>
               <option value="bold">Bold</option>
+              <option value="swiss">Swiss Typography</option>
             </select>
           </label>
           <div className="field-stack">
