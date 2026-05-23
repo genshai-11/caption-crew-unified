@@ -2,7 +2,7 @@ const { normalizeOhmText } = require('./core');
 
 const DEFAULT_CVR_MEASURE_BASE_URL = 'https://chunks-cvr-api-781691010426.asia-southeast1.run.app';
 const DEFAULT_CVR_MEASURE_API_KEY = 'm2m_CHUNK_ANALYZER_SECURE_2026';
-const DEFAULT_CVR_MEASURE_TIMEOUT_MS = 15000;
+const DEFAULT_CVR_MEASURE_TIMEOUT_MS = 45000;
 
 function clamp01(value) {
   if (!Number.isFinite(value)) return 0;

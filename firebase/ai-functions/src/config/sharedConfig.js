@@ -56,7 +56,7 @@ const defaultSharedConfig = {
   ohmAnalysisProvider: 'cvr-measure',
   cvrMeasureBaseUrl: 'https://chunks-cvr-api-781691010426.asia-southeast1.run.app',
   cvrMeasureApiKey: '',
-  cvrMeasureTimeoutMs: 15000,
+  cvrMeasureTimeoutMs: 45000,
   thirdPartyOhmUrl: 'https://ais-dev-msgfyvxutdkvwq3bz4qbhr-148630698694.asia-southeast1.run.app/api/analyze-ohm',
   thirdPartyOhmApiKey: '',
   thirdPartyOhmModel: '',

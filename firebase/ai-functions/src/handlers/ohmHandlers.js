@@ -840,7 +840,7 @@ function logOhmTrainingSample(payload) {
       const cvrResponse = await callCvrMeasure({
         baseUrl: req.body?.cvrMeasureBaseUrl || process.env.CVR_MEASURE_BASE_URL || sharedConfig?.cvrMeasureBaseUrl,
         apiKey: req.body?.cvrMeasureApiKey || process.env.CVR_MEASURE_API_KEY || sharedConfig?.cvrMeasureApiKey,
-        timeoutMs: toFiniteNumber(req.body?.cvrMeasureTimeoutMs, toFiniteNumber(sharedConfig?.cvrMeasureTimeoutMs, 15000)),
+        timeoutMs: Math.max(45000, toFiniteNumber(req.body?.cvrMeasureTimeoutMs, toFiniteNumber(sharedConfig?.cvrMeasureTimeoutMs, 45000))),
         transcript,
         resources: req.body?.resources,
         tcCorrections: req.body?.tcCorrections,
