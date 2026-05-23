@@ -1,6 +1,13 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
+    // Single-device cc-faceoff rounds save audio under rounds/{roundId}/{role}.webm.
+    // This game mode is intentionally usable without sign-in, so allow public round audio writes.
+    match /rounds/{roundId}/{fileName} {
+      allow read, write: if true;
+    }
+
+    // Room/multiplayer rounds save audio under rooms/{roomId}/rounds/{roundId}/{role}.webm.
     match /rooms/{roomId}/rounds/{roundId}/{fileName} {
       allow read, write: if request.auth != null;
     }

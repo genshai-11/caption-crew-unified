@@ -502,15 +502,21 @@ export function useCaptionCrewRound() {
       void (async () => {
         try {
           const [captainAudio, crewAudio, captainVerified, crewVerified] = await Promise.all([
-            uploadRoundAudio(roundId, 'captain', captainAudioBlobRef.current!),
-            uploadRoundAudio(roundId, 'crew', crewBlob),
+            uploadRoundAudio(roundId, 'captain', captainAudioBlobRef.current!).catch((error) => {
+              console.warn('Captain audio upload failed; saving round without captain audio.', error);
+              return null;
+            }),
+            uploadRoundAudio(roundId, 'crew', crewBlob).catch((error) => {
+              console.warn('Crew audio upload failed; saving round without crew audio.', error);
+              return null;
+            }),
             captainBatchPromise.catch(() => null),
             crewBatchPromise.catch(() => null),
           ]);
 
           if (activeRoundTokenRef.current === roundToken) {
-            setCaptainAudioUrl(captainAudio.url);
-            setCrewAudioUrl(crewAudio.url);
+            if (captainAudio?.url) setCaptainAudioUrl(captainAudio.url);
+            if (crewAudio?.url) setCrewAudioUrl(crewAudio.url);
             if (captainVerified) setCaptainVerifiedTranscript(captainVerified);
             if (crewVerified) setCrewVerifiedTranscript(crewVerified);
           }
@@ -527,12 +533,12 @@ export function useCaptionCrewRound() {
             evaluation: result,
             reactionDelayMs: reactionDelayMs || undefined,
             timeoutLost: false,
-            captainAudioUrl: captainAudio.url,
-            crewAudioUrl: crewAudio.url,
-            captainAudioPath: captainAudio.path,
-            crewAudioPath: crewAudio.path,
-            captainAudioMimeType: captainAudio.mimeType,
-            crewAudioMimeType: crewAudio.mimeType,
+            captainAudioUrl: captainAudio?.url,
+            crewAudioUrl: crewAudio?.url,
+            captainAudioPath: captainAudio?.path,
+            crewAudioPath: crewAudio?.path,
+            captainAudioMimeType: captainAudio?.mimeType,
+            crewAudioMimeType: crewAudio?.mimeType,
           };
           await saveRound(round);
         } catch (backgroundError) {
