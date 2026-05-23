@@ -29,8 +29,6 @@ export interface AdminRuntimeConfig {
   router9FallbackModel: string;
   ohmModel: string;
   ohmFallbackModel: string;
-  ohmAgentEnabled: boolean;
-  ohmAgentShadowMode: boolean;
   meaningStrictness: 'loose' | 'medium' | 'strict';
   meaningWeight: number;
   feedbackEnabled: boolean;
@@ -75,8 +73,6 @@ export const defaultAdminRuntimeConfig: AdminRuntimeConfig = {
   router9FallbackModel: '',
   ohmModel: '',
   ohmFallbackModel: '',
-  ohmAgentEnabled: false,
-  ohmAgentShadowMode: true,
   meaningStrictness: 'medium',
   meaningWeight: 100,
   feedbackEnabled: true,
@@ -90,9 +86,7 @@ export const defaultAdminRuntimeConfig: AdminRuntimeConfig = {
 };
 
 function normalizeVisualTheme(value?: string | null): VisualTheme {
-  if (value === 'bold') return 'bold';
-  if (value === 'swiss') return 'swiss';
-  return 'minimal';
+  return value === 'bold' ? 'bold' : 'minimal';
 }
 
 function emitVisualTheme(theme: VisualTheme) {
@@ -111,8 +105,6 @@ function normalizeAdminConfig(raw?: Partial<AdminRuntimeConfig> | null): AdminRu
         ? 'thirdparty'
         : 'deepgram',
     partialTranscriptEnabled: raw?.partialTranscriptEnabled === true,
-    ohmAgentEnabled: raw?.ohmAgentEnabled === true,
-    ohmAgentShadowMode: raw?.ohmAgentShadowMode !== false,
     visualTheme: normalizeVisualTheme(raw?.visualTheme || defaultAdminRuntimeConfig.visualTheme),
   };
 }

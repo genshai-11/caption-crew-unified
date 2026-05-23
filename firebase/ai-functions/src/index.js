@@ -24,6 +24,10 @@ const {
   normalizeOhmText,
 } = require('./ohm/core');
 const {
+  callCvrMeasure,
+  mapCvrMeasureResponseToOhmPayload,
+} = require('./ohm/cvrMeasureClient');
+const {
   createGetDeepgramAccessTokenHandler,
   createTranscribeRoundAudioHandler,
 } = require('./handlers/transcriptHandlers');
@@ -324,6 +328,8 @@ exports.analyzeTranscriptOhm = createAnalyzeTranscriptOhmHandler({
   computeOhmFromChunks,
   normalizeOhmText,
   callRouterChat,
+  callCvrMeasure,
+  mapCvrMeasureResponseToOhmPayload,
 });
 
 async function callRouterChat({ apiKey, baseUrl, model, fallbackModel, messages, temperature = 0.2, responseFormat, timeoutMs = 20000 }) {

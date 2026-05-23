@@ -19,10 +19,16 @@ const {
   computeOhmFromChunks,
   normalizeOhmText,
 } = require('../firebase/ai-functions/src/ohm/core');
+const {
+  normalizeCvrColorLabel,
+  normalizeCvrLengthBand,
+  mapCvrMeasureResponseToOhmPayload,
+} = require('../firebase/ai-functions/src/ohm/cvrMeasureClient');
 
 describe('functions helper modules', () => {
   test('exports canonical shared config defaults and Google STT model catalog', () => {
     expect(defaultSharedConfig.transcriptProvider).toBe('deepgram');
+    expect(defaultSharedConfig.ohmAnalysisProvider).toBe('cvr-measure');
     expect(defaultSharedConfig.ohmWeights).toEqual({ GREEN: 5, BLUE: 7, RED: 9, PINK: 3 });
     expect(GOOGLE_STT_MODELS.map((model) => model.id)).toEqual(['chirp_3', 'chirp_2', 'telephony']);
   });
@@ -88,5 +94,53 @@ describe('functions helper modules', () => {
       formula: '(4 + 9)',
     });
     expect(normalizeOhmText('“Piece of Cake!”')).toBe('piece of cake');
+  });
+
+  test('CVR Measure helper normalizes colors, bands, and maps API response into OHM payload shape', () => {
+    expect(normalizeCvrColorLabel('Pink')).toBe('PINK');
+    expect(normalizeCvrLengthBand('Very Short')).toBe('veryShort');
+
+    const payload = mapCvrMeasureResponseToOhmPayload({
+      status: 'success',
+      data: {
+        transcriptRaw: 'Thành thật mà nói, hạ đường huyết không phải chuyện nhỏ.',
+        transcriptNormalized: 'thành thật mà nói hạ đường huyết không phải chuyện nhỏ',
+        predictedCVR: 10,
+        calculationString: '8 (TC) × 1 (LC) × 1.2 (TL) = 10',
+        lcBreakdown: {
+          sentenceCount: 1,
+          wordCount: 10,
+          lengthBand: 'Very Short',
+          lcValue: 1,
+        },
+        tcBreakdown: {
+          matchedResources: [
+            { text: 'thành thật mà nói', color: 'Green', ohm: 5, matchStart: 0, matchEnd: 17, specificity: 4.0 },
+          ],
+          candidateResources: [
+            { text: 'hạ đường huyết', color: 'Pink', ohm: 3, confidence: 0.9, reasoning: 'technical term' },
+          ],
+          confirmedTC: 5,
+          estimatedTC: 8,
+        },
+        tlBreakdown: {
+          band: 'TL 1.0-1.2 Daily life / casual routine',
+          tlValue: 1.2,
+          confidence: 0.9,
+        },
+      },
+    }, { elapsedMs: 123 });
+
+    expect(payload.totalOhm).toBe(10);
+    expect(payload.baseOhm).toBe(8);
+    expect(payload.lengthBucket).toBe('veryShort');
+    expect(payload.lengthCoefficient).toBe(1);
+    expect(payload.analysisSource).toBe('cvr-measure');
+    expect(payload.chunks).toEqual([
+      { text: 'thành thật mà nói', label: 'GREEN', ohm: 5, confidence: 1, reason: 'matched resource from CVR library' },
+      { text: 'hạ đường huyết', label: 'PINK', ohm: 3, confidence: 0.9, reason: 'technical term' },
+    ]);
+    expect(payload.agentDiagnostics.provider).toBe('cvr-measure');
+    expect(payload.chunkDiagnostics).toHaveLength(2);
   });
 });

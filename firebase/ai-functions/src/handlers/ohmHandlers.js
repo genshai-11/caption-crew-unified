@@ -16,6 +16,8 @@ function createAnalyzeTranscriptOhmHandler(deps) {
     computeOhmFromChunks,
     normalizeOhmText,
     callRouterChat,
+    callCvrMeasure,
+    mapCvrMeasureResponseToOhmPayload,
   } = deps;
 
 const OHM_NOISE_TERMS = new Set(['liệu', 'à', 'ạ', 'ơi', 'ơ', 'hả', 'nhé', 'nha', 'nhỉ', 'nhỉ?', 'ừ', 'ừm', 'ok', 'okay', 'đi', 'vớ']);
@@ -830,6 +832,29 @@ function logOhmTrainingSample(payload) {
     if (!transcript) throw new Error('Transcript is required');
 
     const sharedConfig = await getSharedAdminConfig();
+    const explicitProvider = String(req.body?.ohmAnalysisProvider || process.env.OHM_ANALYSIS_PROVIDER || '').trim().toLowerCase();
+    const analysisProvider = explicitProvider === 'router9' ? 'router9' : 'cvr-measure';
+    const startedAt = Date.now();
+
+    if (analysisProvider === 'cvr-measure') {
+      const cvrResponse = await callCvrMeasure({
+        baseUrl: req.body?.cvrMeasureBaseUrl || process.env.CVR_MEASURE_BASE_URL || sharedConfig?.cvrMeasureBaseUrl,
+        apiKey: req.body?.cvrMeasureApiKey || process.env.CVR_MEASURE_API_KEY || sharedConfig?.cvrMeasureApiKey,
+        timeoutMs: toFiniteNumber(req.body?.cvrMeasureTimeoutMs, toFiniteNumber(sharedConfig?.cvrMeasureTimeoutMs, 15000)),
+        transcript,
+        resources: req.body?.resources,
+        tcCorrections: req.body?.tcCorrections,
+        settings: req.body?.settings,
+      });
+
+      const responsePayload = mapCvrMeasureResponseToOhmPayload(cvrResponse, {
+        elapsedMs: Date.now() - startedAt,
+      });
+
+      res.json(responsePayload);
+      return;
+    }
+
     const apiKey = req.body.routerApiKey || process.env.ROUTER9_API_KEY || sharedConfig.router9ApiKey;
     const baseUrl = req.body.routerBaseUrl || process.env.ROUTER9_BASE_URL || sharedConfig.router9BaseUrl || 'http://34.87.121.108:20128/v1';
     const model = String(req.body.model || sharedConfig.ohmModel || sharedConfig.router9Model || process.env.ROUTER9_MODEL || 'gpt').trim();
@@ -837,8 +862,6 @@ function logOhmTrainingSample(payload) {
     const ohmSettings = normalizeOhmSettings(sharedConfig);
 
     const prompt = `You are an expert linguistic analyzer. Analyze transcript and extract semantic chunks in labels GREEN, BLUE, RED, PINK only.\n\nLabel definitions:\n- GREEN: discourse opener / sentence opener / transition starter.\n- BLUE: reusable sentence frame/pattern with slots.\n- RED: idioms, proverbs, figurative sayings. Proverbs must be RED (never GREEN).\n- PINK: difficult/specific vocabulary terms or collocations (not basic everyday words).\n\nRules:\n1) Do not classify everything. Most words are NORMAL and must be ignored.\n2) Extract exact substrings from transcript only.\n3) Do NOT classify single filler words, particles, or isolated question words (examples: liệu, à, ạ, hả, nhé).\n4) GREEN/BLUE/RED should usually be phrase-level (>= 2 words).\n5) If a phrase is an idiom/proverb, label it RED even if it appears at sentence start.\n6) Return valid JSON object only.\n7) Keep confidence in 0..1.\n\nTranscript:\n${JSON.stringify(transcript)}\n\nReturn JSON with keys: transcriptRaw, transcriptNormalized, chunks.\nEach chunk item must include text, label, confidence, reason.`;
-
-    const startedAt = Date.now();
     const agentEnabled = toBoolean(req.body?.useMemoryAssist, toBoolean(sharedConfig?.ohmAgentEnabled, false));
     const agentShadowMode = toBoolean(req.body?.agentShadowMode, toBoolean(sharedConfig?.ohmAgentShadowMode, true));
     const agentEndpoint = String(req.body?.agentEndpoint || sharedConfig?.ohmAgentEndpoint || '').trim();
