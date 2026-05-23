@@ -156,7 +156,9 @@ export const defaultAdminRuntimeConfig: AdminRuntimeConfig = {
 };
 
 function normalizeVisualTheme(value?: string | null): VisualTheme {
-  return value === 'bold' ? 'bold' : 'minimal';
+  if (value === 'bold') return 'bold';
+  if (value === 'swiss') return 'swiss';
+  return 'minimal';
 }
 
 function emitVisualTheme(theme: VisualTheme) {
