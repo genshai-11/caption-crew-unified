@@ -71,7 +71,7 @@ export default function GamePage() {
         <div className="chunks-brand-block">
           <img src="/chunks-logo.png" alt="Chunks" className="chunks-logo" />
           <div>
-            <p className="game-kicker">Caption & Crew</p>
+            <p className="game-kicker">captain & crew</p>
             <h1 className="game-title">CC FACE OFF</h1>
           </div>
         </div>
