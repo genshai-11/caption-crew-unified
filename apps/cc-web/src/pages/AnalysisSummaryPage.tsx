@@ -93,6 +93,7 @@ export default function AnalysisSummaryPage() {
       <SummaryOhmCard
         ohmResult={summary?.ohmResult || null}
         reactionDelayMs={summary?.reactionDelayMs}
+        metrics={summary?.metrics || null}
       />
 
       {summary?.evaluation && (

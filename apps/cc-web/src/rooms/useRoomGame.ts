@@ -11,7 +11,7 @@ import { useRoundRecorder } from '@/hooks/useRoundRecorder';
 import { createRoomWithJoinCode } from './roomService';
 import { usePublicTiming } from '@/hooks/usePublicTiming';
 import { usePublicScoring } from '@/hooks/usePublicScoring';
-import type { OhmResult } from '@/types';
+import { buildRoundMetrics, type OhmResult } from '@/types';
 import type { RoomDoc, RoomRoundDoc } from './types';
 
 function extensionForMime(mime: string) {
@@ -96,6 +96,8 @@ export function useRoomGame(params: {
   const scoring = usePublicScoring();
   const crewWinThreshold = scoring.crewWinThreshold;
   const targetPoints = scoring.targetPoints;
+  const mseCoefficient = scoring.mseCoefficient;
+  const cvrTargetRawUnits = scoring.cvrTargetRawUnits;
 
   const captainRecorder = useRoundRecorder();
   const crewRecorder = useRoundRecorder();
@@ -219,6 +221,7 @@ export function useRoomGame(params: {
       crewTranscript: (currentRound as any).crewTranscriptMeta,
       evaluation: evalWithWinner,
       ohmResult: (currentRound as any).ohmResult || null,
+      metrics: (currentRound as any).metrics || null,
       reactionDelayMs: (currentRound as any).reactionDelayMs ?? null,
       timeoutLost: endReason === 'crew_timeout' && isCrew,
       captainAudioPath: (currentRound as any).captainAudioPath,
@@ -227,6 +230,54 @@ export function useRoomGame(params: {
       crewAudioMimeType: (currentRound as any).crewAudioMimeType,
     } as any);
   }, [currentRound?.id, currentRound?.status, isCrew, roomId, user?.uid]);
+
+  const swapRoles = useCallback(async () => {
+    if (!db) throw new Error('Firestore not configured');
+    if (!room) throw new Error('Room not loaded');
+    if (!user?.uid || user.uid !== room.hostId) throw new Error('Only the host can swap roles.');
+
+    await updateDoc(doc(db, 'rooms', roomId), {
+      captainId: room.crewId || null,
+      crewId: room.captainId || null,
+      captainName: room.crewName || null,
+      crewName: room.captainName || null,
+      updatedAt: serverTimestamp(),
+    });
+  }, [room, roomId, user?.uid]);
+
+  const finishCurrentRound = useCallback(async (options?: { clearRole?: 'captain' | 'crew' }) => {
+    if (!db) throw new Error('Firestore not configured');
+    if (!room) throw new Error('Room not loaded');
+    if (!user?.uid || user.uid !== room.hostId) throw new Error('Only the host can end or rotate the active players.');
+
+    const updates: Record<string, unknown> = {
+      updatedAt: serverTimestamp(),
+    };
+    if (options?.clearRole === 'captain') {
+      updates.captainId = null;
+      updates.captainName = null;
+    }
+    if (options?.clearRole === 'crew') {
+      updates.crewId = null;
+      updates.crewName = null;
+    }
+
+    if (currentRound && currentRound.status !== 'finished') {
+      await updateDoc(doc(db, 'rooms', roomId, 'rounds', currentRound.id), {
+        status: 'finished',
+        winnerRole: 'none',
+        endReason: 'manual',
+      });
+    }
+
+    if (options?.clearRole) {
+      updates.status = 'waiting';
+    } else if (currentRound && currentRound.status !== 'finished') {
+      updates.status = 'playing';
+    }
+
+    await updateDoc(doc(db, 'rooms', roomId), updates);
+  }, [currentRound, room, roomId, user?.uid]);
 
   const createRoom = useCallback(async () => {
     if (!user?.uid) throw new Error('Please sign in first');
@@ -243,6 +294,8 @@ export function useRoomGame(params: {
       roomId,
       roundNumber: rounds.length + 1,
       status: 'captain_speaking',
+      captainPlayerId: room?.captainId || null,
+      crewPlayerId: room?.crewId || null,
       createdAt: serverTimestamp(),
     } satisfies Partial<RoomRoundDoc>);
 
@@ -250,7 +303,7 @@ export function useRoomGame(params: {
       status: 'playing',
       updatedAt: serverTimestamp(),
     });
-  }, [isCaptain, roomId, rounds.length, user?.uid]);
+  }, [isCaptain, room?.captainId, room?.crewId, roomId, rounds.length, user?.uid]);
 
   const startCaptain = useCallback(async () => {
     await captainRecorder.start();
@@ -359,6 +412,7 @@ export function useRoomGame(params: {
       });
 
       let ohmResult: OhmResult | null = null;
+      let cvrSource = 'cvr-analysis';
       try {
         const runtimeConfig = loadAdminRuntimeConfig();
 
@@ -382,6 +436,7 @@ export function useRoomGame(params: {
           sessionId: `${roomId}-${currentRound.id}`,
         });
 
+        cvrSource = String(aiAnalysis.analysisSource || 'cvr-analysis');
         const totalOhm = Number(aiAnalysis.totalOhm || 0);
         const current = Number(aiAnalysis.lengthCoefficient || 1);
         const voltage = totalOhm;
@@ -413,6 +468,16 @@ export function useRoomGame(params: {
       const reactionDelayMs =
         captainStoppedAtMs && crewStartedAtMs ? Math.max(0, crewStartedAtMs - captainStoppedAtMs) : undefined;
 
+      const metrics = buildRoundMetrics({
+        ohmResult,
+        evaluation,
+        mseCoefficient,
+        mseSource: mseCoefficient === 1 ? 'manual-default' : 'manual-adjusted',
+        mseMeasured: false,
+        cvrTargetRawUnits,
+        cvrSource,
+      });
+
       const threshold = crewWinThreshold;
       const winnerRole: 'captain' | 'crew' = evaluation.matchScore >= threshold ? 'crew' : 'captain';
 
@@ -421,6 +486,7 @@ export function useRoomGame(params: {
         feedback: evaluation.reason,
         meaningAnalysis: evaluation,
         ohmResult: ohmResult || null,
+        metrics,
         reactionDelayMs: reactionDelayMs ?? null,
         winnerRole,
         endReason: 'meaning',
@@ -448,7 +514,7 @@ export function useRoomGame(params: {
     } finally {
       setProcessing(false);
     }
-  }, [crewRecorder, currentRound, roomId]);
+  }, [crewRecorder, currentRound, roomId, crewWinThreshold, targetPoints, mseCoefficient, cvrTargetRawUnits]);
 
   return {
     user,
@@ -464,6 +530,8 @@ export function useRoomGame(params: {
     createRoom,
     joinRole,
     startRound,
+    swapRoles,
+    finishCurrentRound,
     captainRecorder,
     crewRecorder,
     startCaptain,

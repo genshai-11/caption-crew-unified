@@ -6,7 +6,7 @@ import { createDeepgramStreamingSession, DeepgramStreamingSession } from '@/serv
 import { transcribeRoundAudio } from '@/services/transcriptionService';
 import { analyzeTranscript } from '@/services/aiService';
 import { calculateSemanticOhm, detectSemanticChunksFromCaptain, getDifficultyLabel } from '@/lib/ohmCalculator';
-import { GameSettings, MeaningEvaluation, OhmResult, RoundRecord, RoundState, TranscriptResult } from '@/types';
+import { buildRoundMetrics, GameSettings, MeaningEvaluation, OhmResult, RoundMetrics, RoundRecord, RoundState, TranscriptResult } from '@/types';
 import { loadAdminRuntimeConfig } from '@/services/adminConfigRepository';
 import { useRoundRecorder } from './useRoundRecorder';
 
@@ -39,9 +39,15 @@ function resolveCrewResponseCoefficient(
   return 1 - ratio * (1 - minCoefficient);
 }
 
+const ROLE_SETUP_KEY = 'cc-faceoff-role-setup-v1';
+
 function shouldUseDeepgramLivePartial() {
   const config = loadAdminRuntimeConfig();
   return config.transcriptProvider === 'deepgram' && config.partialTranscriptEnabled === true;
+}
+
+function createLocalPlayerId(role: 'captain' | 'crew') {
+  return `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function useCaptionCrewRound() {
@@ -59,6 +65,7 @@ export function useCaptionCrewRound() {
   const [crewAudioUrl, setCrewAudioUrl] = useState<string | null>(null);
   const [evaluation, setEvaluation] = useState<MeaningEvaluation | null>(null);
   const [ohmResult, setOhmResult] = useState<OhmResult | null>(null);
+  const [metrics, setMetrics] = useState<RoundMetrics | null>(null);
   const [reactionDelayMs, setReactionDelayMs] = useState<number | null>(null);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
   const [countdownMs, setCountdownMs] = useState<number | null>(null);
@@ -66,6 +73,10 @@ export function useCaptionCrewRound() {
   const [crewLiveTranscript, setCrewLiveTranscript] = useState('');
   const [captainStreamingStatus, setCaptainStreamingStatus] = useState('Ready for live Vietnamese transcript');
   const [crewStreamingStatus, setCrewStreamingStatus] = useState('Ready for live English transcript');
+  const [captainName, setCaptainName] = useState('');
+  const [crewName, setCrewName] = useState('');
+  const [captainPlayerId, setCaptainPlayerId] = useState<string | null>(null);
+  const [crewPlayerId, setCrewPlayerId] = useState<string | null>(null);
 
   const captainAudioBlobRef = useRef<Blob | null>(null);
   const captainStoppedAtRef = useRef<number | null>(null);
@@ -79,7 +90,53 @@ export function useCaptionCrewRound() {
 
   useEffect(() => {
     loadSettings().then(setSettings).catch(() => undefined);
+    try {
+      const saved = JSON.parse(localStorage.getItem(ROLE_SETUP_KEY) || '{}');
+      setCaptainName(String(saved.captainName || ''));
+      setCrewName(String(saved.crewName || ''));
+      setCaptainPlayerId(saved.captainPlayerId ? String(saved.captainPlayerId) : null);
+      setCrewPlayerId(saved.crewPlayerId ? String(saved.crewPlayerId) : null);
+    } catch {
+      // ignore invalid local setup
+    }
   }, []);
+
+  const persistRoleSetup = useCallback((next: {
+    captainName: string;
+    crewName: string;
+    captainPlayerId: string;
+    crewPlayerId: string;
+  }) => {
+    localStorage.setItem(ROLE_SETUP_KEY, JSON.stringify(next));
+    setCaptainName(next.captainName);
+    setCrewName(next.crewName);
+    setCaptainPlayerId(next.captainPlayerId);
+    setCrewPlayerId(next.crewPlayerId);
+  }, []);
+
+  const saveRoleSetup = useCallback((nextCaptainName: string, nextCrewName: string) => {
+    const trimmedCaptain = nextCaptainName.trim().slice(0, 40);
+    const trimmedCrew = nextCrewName.trim().slice(0, 40);
+    if (!trimmedCaptain || !trimmedCrew) return false;
+
+    persistRoleSetup({
+      captainName: trimmedCaptain,
+      crewName: trimmedCrew,
+      captainPlayerId: captainPlayerId || createLocalPlayerId('captain'),
+      crewPlayerId: crewPlayerId || createLocalPlayerId('crew'),
+    });
+    return true;
+  }, [captainPlayerId, crewPlayerId, persistRoleSetup]);
+
+  const swapRoles = useCallback(() => {
+    if (!captainName.trim() || !crewName.trim()) return;
+    persistRoleSetup({
+      captainName: crewName,
+      crewName: captainName,
+      captainPlayerId: crewPlayerId || createLocalPlayerId('captain'),
+      crewPlayerId: captainPlayerId || createLocalPlayerId('crew'),
+    });
+  }, [captainName, captainPlayerId, crewName, crewPlayerId, persistRoleSetup]);
 
   const clearCrewTimers = useCallback(() => {
     if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
@@ -200,6 +257,7 @@ export function useCaptionCrewRound() {
     setCrewAudioUrl(null);
     setEvaluation(null);
     setOhmResult(null);
+    setMetrics(null);
     setReactionDelayMs(null);
     setFeedbackError(null);
     setCaptainLiveTranscript('');
@@ -212,6 +270,25 @@ export function useCaptionCrewRound() {
     captainPrimaryTranscriptPromiseRef.current = null;
     clearCrewTimers();
   }, [captainRecorder, clearCrewTimers, crewRecorder]);
+
+  const replaceLearners = useCallback((nextCaptainName: string, nextCrewName: string) => {
+    const trimmedCaptain = nextCaptainName.trim().slice(0, 40);
+    const trimmedCrew = nextCrewName.trim().slice(0, 40);
+    if (!trimmedCaptain || !trimmedCrew) return false;
+
+    resetRound();
+    persistRoleSetup({
+      captainName: trimmedCaptain,
+      crewName: trimmedCrew,
+      captainPlayerId: createLocalPlayerId('captain'),
+      crewPlayerId: createLocalPlayerId('crew'),
+    });
+    return true;
+  }, [persistRoleSetup, resetRound]);
+
+  const endRound = useCallback(() => {
+    resetRound();
+  }, [resetRound]);
 
   const startCaptain = useCallback(async () => {
     resetRound();
@@ -443,6 +520,14 @@ export function useCaptionCrewRound() {
           score: toOhmScore(voltage),
           difficulty: getDifficultyLabel(voltage),
           chunkCount: aiAnalysis.chunks.length,
+          baseOhm: typeof aiAnalysis.baseOhm === 'number' ? aiAnalysis.baseOhm : undefined,
+          estimatedTC: typeof aiAnalysis.estimatedTC === 'number' ? aiAnalysis.estimatedTC : typeof aiAnalysis.baseOhm === 'number' ? aiAnalysis.baseOhm : undefined,
+          confirmedTC: typeof aiAnalysis.confirmedTC === 'number' ? aiAnalysis.confirmedTC : undefined,
+          candidateTC: typeof aiAnalysis.candidateTC === 'number' ? aiAnalysis.candidateTC : undefined,
+          linguisticComplexity: lengthCoefficient,
+          tensionLoad: typeof aiAnalysis.topicLevel === 'number' ? aiAnalysis.topicLevel : undefined,
+          responseCoefficient,
+          repeatCoefficient: 1,
           chunks: aiAnalysis.chunks
             .map((chunk) => ({
               ...chunk,
@@ -477,6 +562,12 @@ export function useCaptionCrewRound() {
           score: toOhmScore(adjustedVoltage),
           difficulty: getDifficultyLabel(adjustedVoltage),
           chunkCount: semanticChunks.length,
+          baseOhm: rawOhm.totalOhm / Math.max(fallbackLengthCoefficient, 0.0001),
+          estimatedTC: rawOhm.totalOhm / Math.max(fallbackLengthCoefficient, 0.0001),
+          linguisticComplexity: fallbackLengthCoefficient,
+          tensionLoad: 1,
+          responseCoefficient,
+          repeatCoefficient: 1,
           chunks: semanticChunks.map((chunk) => ({
             text: chunk.text,
             label: chunk.label,
@@ -495,6 +586,16 @@ export function useCaptionCrewRound() {
         strictness: settings.strictness,
       });
 
+      const nextMetrics = buildRoundMetrics({
+        ohmResult: nextOhmResult,
+        evaluation: result,
+        mseCoefficient: 1,
+        mseSource: 'manual-default',
+        mseMeasured: false,
+        cvrSource: 'cvr-analysis',
+      });
+
+      setMetrics(nextMetrics);
       setEvaluation(result);
       setState('results');
 
@@ -525,11 +626,16 @@ export function useCaptionCrewRound() {
             id: roundId,
             createdAt: new Date().toISOString(),
             state: 'results',
+            captainPlayerId,
+            crewPlayerId,
+            captainName: captainName || null,
+            crewName: crewName || null,
             captainTranscript: captainResult,
             crewTranscript: crewResult,
             captainVerifiedTranscript: captainVerified || undefined,
             crewVerifiedTranscript: crewVerified || undefined,
             ohmResult: nextOhmResult,
+            metrics: nextMetrics,
             evaluation: result,
             reactionDelayMs: reactionDelayMs || undefined,
             timeoutLost: false,
@@ -549,7 +655,7 @@ export function useCaptionCrewRound() {
       setFeedbackError(error.message || 'Analysis failed.');
       setState('results');
     }
-  }, [crewRecorder, reactionDelayMs, resolvePrimaryTranscript, settings.strictness, startCaptainTranscriptionPrefetch]);
+  }, [captainName, captainPlayerId, crewName, crewPlayerId, crewRecorder, reactionDelayMs, resolvePrimaryTranscript, settings.strictness, startCaptainTranscriptionPrefetch]);
 
   useEffect(() => () => clearCrewTimers(), [clearCrewTimers]);
 
@@ -564,6 +670,15 @@ export function useCaptionCrewRound() {
     setSettings,
     captainRecorder,
     crewRecorder,
+    captainName,
+    crewName,
+    captainPlayerId,
+    crewPlayerId,
+    rolesConfigured: !!captainName.trim() && !!crewName.trim(),
+    saveRoleSetup,
+    replaceLearners,
+    swapRoles,
+    endRound,
     captainTranscript,
     crewTranscript,
     captainVerifiedTranscript,
@@ -578,6 +693,7 @@ export function useCaptionCrewRound() {
     crewAudioUrl,
     evaluation,
     ohmResult,
+    metrics,
     feedbackError,
     reactionDelayMs,
     countdownMs,

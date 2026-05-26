@@ -117,6 +117,11 @@ h1, h2, h3, p { margin: 0; }
   gap: 16px;
 }
 .section-title { font-size: 18px; font-weight: 500; }
+.metric-system-title {
+  font-size: clamp(22px, 4vw, 34px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
 .section-title-row { display: flex; justify-content: space-between; align-items: center; }
 
 .admin-grid { display: grid; gap: 14px; }
@@ -414,6 +419,15 @@ input:focus, select:focus {
   font-size: 22px;
   font-weight: 500;
 }
+.metric-title {
+  display: inline-block;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.metric-cvr { color: var(--red); }
+.metric-cci { color: #10b981; }
+.metric-cpd { color: var(--blue); }
 .analysis-reason {
   color: var(--muted);
   font-size: 15px;
@@ -559,6 +573,34 @@ input:focus, select:focus {
 }
 .summary-inline-metrics {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.metric-formula-card {
+  border-color: rgba(79,124,255,0.18);
+}
+.metric-formula-hero {
+  padding: 18px;
+  border: 1px solid rgba(255,107,107,0.18);
+  border-radius: 20px;
+  background: rgba(255,107,107,0.055);
+}
+.metric-formula-value {
+  font-size: clamp(34px, 7vw, 56px);
+  font-weight: 850;
+  letter-spacing: -0.05em;
+}
+.metric-formula-detail {
+  display: block;
+  margin-top: 8px;
+  color: currentColor;
+  font-size: 14px;
+  line-height: 1.55;
+  opacity: 0.86;
+}
+.metric-mse-input input {
+  color: #10b981;
+  border-color: rgba(16,185,129,0.3);
+  font-size: 22px;
+  font-weight: 500;
 }
 .summary-audio-block,
 .summary-transcript-block,

@@ -79,8 +79,16 @@ function HistoryCard({ round }: { round: RoundRecord }) {
 
       <div className="history-metric-row history-metric-row-compact">
         <div>
-          <span className="metric-label">meaning</span>
-          <span className="metric-value">{formatScorePercent(round.evaluation?.matchScore)}</span>
+          <span className="metric-label metric-cci">CCI ({round.metrics?.cci.unit || 'A'})</span>
+          <span className="metric-value metric-cci">{round.metrics?.cci.score != null ? `${round.metrics.cci.score} ${round.metrics.cci.unit}` : formatScorePercent(round.evaluation?.matchScore)}</span>
+        </div>
+        <div>
+          <span className="metric-label metric-cvr">CVR ({round.metrics?.cvr.unit || 'Ω'})</span>
+          <span className="metric-value metric-cvr">{round.metrics?.cvr.rawUnits != null ? `${round.metrics.cvr.rawUnits} ${round.metrics.cvr.unit}` : '—'}</span>
+        </div>
+        <div>
+          <span className="metric-label metric-cpd">CPD ({round.metrics?.cpd.unit || 'V'})</span>
+          <span className="metric-value metric-cpd">{round.metrics?.cpd.raw != null ? `${round.metrics.cpd.raw} ${round.metrics.cpd.unit}` : round.metrics?.cpd.score != null ? `${round.metrics.cpd.score} ${round.metrics.cpd.unit}` : '—'}</span>
         </div>
         <div>
           <span className="metric-label">delay</span>
@@ -104,7 +112,7 @@ function HistoryCard({ round }: { round: RoundRecord }) {
           </div>
 
           <div className="analysis-detail-block">
-            <span className="metric-label">llm meaning analysis</span>
+            <span className="metric-label">CCI meaning analysis</span>
             <p className="analysis-reason">{round.evaluation?.reason || 'No evaluation summary available.'}</p>
           </div>
 

@@ -127,6 +127,11 @@ h1, h2, h3, p { margin: 0; }
   gap: 16px;
 }
 .section-title { font-size: 18px; font-weight: 500; }
+.metric-system-title {
+  font-size: clamp(22px, 4vw, 34px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
 .section-title-row { display: flex; justify-content: space-between; align-items: center; }
 
 .admin-grid { display: grid; gap: 14px; }
@@ -498,6 +503,15 @@ input:focus, select:focus {
   font-size: 22px;
   font-weight: 500;
 }
+.metric-title {
+  display: inline-block;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.metric-cvr { color: var(--red); }
+.metric-cci { color: #10b981; }
+.metric-cpd { color: var(--blue); }
 .analysis-reason {
   color: var(--muted);
   font-size: 15px;

@@ -600,6 +600,60 @@ export default function AdminPage() {
 
       <section className="soft-card admin-section-minimal">
         <div className="section-title-row">
+          <h2 className="section-title">Chunks scoring</h2>
+        </div>
+        <p className="admin-message">CCI = current LLM meaning % × MSE. MSE defaults to 1 because Motion / Sound / Emotion is not measured automatically yet.</p>
+        <div className="admin-grid two-up">
+          <label className="field-stack">
+            <span>MSE coefficient</span>
+            <input
+              type="number"
+              min={0}
+              max={5}
+              step={0.05}
+              value={scoring.mseCoefficient}
+              onChange={(e) => setScoring((prev) => ({ ...prev, mseCoefficient: Number(e.target.value) || 1 }))}
+            />
+          </label>
+          <label className="field-stack">
+            <span>CVR target raw units</span>
+            <input
+              type="number"
+              min={1}
+              max={1000}
+              step={1}
+              value={scoring.cvrTargetRawUnits}
+              onChange={(e) => setScoring((prev) => ({ ...prev, cvrTargetRawUnits: Number(e.target.value) || 120 }))}
+            />
+          </label>
+        </div>
+        <div className="admin-grid two-up">
+          <label className="field-stack">
+            <span>Crew win threshold (CCI %)</span>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={scoring.crewWinThreshold}
+              onChange={(e) => setScoring((prev) => ({ ...prev, crewWinThreshold: Number(e.target.value) || 0 }))}
+            />
+          </label>
+          <label className="field-stack">
+            <span>Target points</span>
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={scoring.targetPoints}
+              onChange={(e) => setScoring((prev) => ({ ...prev, targetPoints: Number(e.target.value) || 3 }))}
+            />
+          </label>
+        </div>
+        <p className="admin-message">CPD stores both raw CCI × CVR for Chunks theory fidelity and a normalized blue score for UI comparison.</p>
+      </section>
+
+      <section className="soft-card admin-section-minimal">
+        <div className="section-title-row">
           <h2 className="section-title">Test transcription</h2>
           <p className="admin-message">Record Vietnamese/English sample audio to test transcription on current settings.</p>
         </div>

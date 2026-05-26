@@ -136,6 +136,8 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
   const showRolePick = !room?.captainId || !room?.crewId;
   const isCaptain = !!room && room.captainId === userId;
   const isCrew = !!room && room.crewId === userId;
+  const isHost = !!room && room.hostId === userId;
+  const isActiveRound = !!currentRound && currentRound.status !== 'finished';
   const myName = isCaptain ? room?.captainName : isCrew ? room?.crewName : null;
 
   const [nickname, setNickname] = useState<string>('');
@@ -209,6 +211,25 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
               <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--blue)' }}>{(room.crewName || '—')}</div>
             </div>
           </div>
+          {isHost && (room.captainId || room.crewId) && (
+            <div className="action-row" style={{ marginTop: 12 }}>
+              {isActiveRound && (
+                <button type="button" className="ghost-pill-button" onClick={() => void game.finishCurrentRound()}>
+                  End current round
+                </button>
+              )}
+              {room.captainId && (
+                <button type="button" className="ghost-pill-button" onClick={() => void game.finishCurrentRound({ clearRole: 'captain' })}>
+                  {isActiveRound ? 'End & open Captain' : 'Open Captain slot'}
+                </button>
+              )}
+              {room.crewId && (
+                <button type="button" className="ghost-pill-button" onClick={() => void game.finishCurrentRound({ clearRole: 'crew' })}>
+                  {isActiveRound ? 'End & open Crew' : 'Open Crew slot'}
+                </button>
+              )}
+            </div>
+          )}
         </section>
       )}
 
@@ -236,6 +257,15 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
             <button type="button" className="ghost-pill-button" onClick={onLeave}>Leave</button>
           </div>
         </section>
+      ) : !isCaptain && !isCrew ? (
+        <section className="soft-card admin-section-minimal">
+          <p className="muted-copy">Room is full</p>
+          <p className="admin-message">Ask the host to end the current round and open a Captain or Crew slot. When a slot opens, you can choose your role here.</p>
+          <div className="action-row">
+            <button type="button" className="ghost-pill-button" onClick={onLeave}>Leave</button>
+            <button type="button" className="ghost-pill-button" onClick={() => void copyInvite()}>Copy invite</button>
+          </div>
+        </section>
       ) : !mic.micReady ? (
         <section className="soft-card admin-section-minimal">
           <p className="muted-copy">Microphone permission</p>
@@ -255,16 +285,16 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
               {currentRound?.status === 'finished' && (
                 <section className="summary-two-up" style={{ marginTop: 12 }}>
                   <SummaryVoiceCard
-                    title="Component 1"
-                    subtitle="Captain · Vietnamese input"
+                    title="Vietnamese input"
+                    subtitle={`Captain${room.captainName ? ` · ${room.captainName}` : ''}`}
                     transcript={currentRound?.captainTranscript || null}
                     transcriptMeta={currentRound?.captainTranscriptMeta || null}
                     audioUrl={captainAudioUrl}
                     audioFallbackMessage="Audio replay is available on the recording device. (To share across devices, enable Firebase Storage.)"
                   />
                   <SummaryVoiceCard
-                    title="Component 2"
-                    subtitle="Crew · English response"
+                    title="English response"
+                    subtitle={`Crew${room.crewName ? ` · ${room.crewName}` : ''}`}
                     transcript={currentRound?.crewTranscript || null}
                     transcriptMeta={currentRound?.crewTranscriptMeta || null}
                     audioUrl={crewAudioUrl}
@@ -277,6 +307,7 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
                 <SummaryOhmCard
                   ohmResult={(currentRound as any)?.ohmResult || null}
                   reactionDelayMs={currentRound?.reactionDelayMs || null}
+                  metrics={(currentRound as any)?.metrics || null}
                 />
               )}
 
@@ -296,6 +327,11 @@ function RoomInner({ roomId, userId, onLeave }: { roomId: string; userId: string
                   </button>
                 ) : (
                   <p className="muted-copy">Waiting for Captain to start…</p>
+                )}
+                {room.hostId === userId && (
+                  <button type="button" className="ghost-pill-button" onClick={() => void game.swapRoles()} disabled={!room.captainId || !room.crewId}>
+                    Swap roles
+                  </button>
                 )}
                 <button type="button" className="ghost-pill-button" onClick={() => void finishRoom()}>Finish room</button>
               </div>

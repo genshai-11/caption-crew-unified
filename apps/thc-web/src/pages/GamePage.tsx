@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RolePanel } from '@/components/RolePanel';
 import { useCaptionCrewRound } from '@/hooks/useCaptionCrewRound';
@@ -23,6 +23,14 @@ export default function GamePage() {
   const navigate = useNavigate();
   const round = useCaptionCrewRound();
   const overlay = getOverlayCopy(round.state);
+  const [captainInput, setCaptainInput] = useState('');
+  const [crewInput, setCrewInput] = useState('');
+  const [editingLearners, setEditingLearners] = useState(false);
+
+  useEffect(() => {
+    setCaptainInput(round.captainName || '');
+    setCrewInput(round.crewName || '');
+  }, [round.captainName, round.crewName]);
 
   useEffect(() => {
     if (round.state === 'results' || round.state === 'crew-timeout') {
@@ -31,11 +39,16 @@ export default function GamePage() {
           evaluation: round.evaluation,
           reactionDelayMs: round.reactionDelayMs,
           errorMessage: round.feedbackError,
+          captainPlayerId: round.captainPlayerId,
+          crewPlayerId: round.crewPlayerId,
+          captainName: round.captainName,
+          crewName: round.crewName,
           captainTranscript: round.captainTranscript,
           crewTranscript: round.crewTranscript,
           captainVerifiedTranscript: round.captainVerifiedTranscript,
           crewVerifiedTranscript: round.crewVerifiedTranscript,
           ohmResult: round.ohmResult,
+          metrics: round.metrics,
           captainAudioBlob: round.captainAudioBlob,
           crewAudioBlob: round.crewAudioBlob,
           captainAudioUrl: round.captainAudioUrl,
@@ -52,18 +65,40 @@ export default function GamePage() {
     navigate,
     round.captainAudioBlob,
     round.captainAudioUrl,
+    round.captainName,
+    round.captainPlayerId,
     round.captainTranscript,
     round.captainVerifiedTranscript,
     round.crewAudioBlob,
     round.crewAudioUrl,
+    round.crewName,
+    round.crewPlayerId,
     round.crewTranscript,
     round.crewVerifiedTranscript,
     round.ohmResult,
+    round.metrics,
     round.evaluation,
     round.feedbackError,
     round.reactionDelayMs,
     round.state,
   ]);
+
+  const canEditLearners = round.state === 'captain-ready';
+  const canEndRound = round.rolesConfigured && round.state !== 'captain-ready';
+  const showRoleSetup = !round.rolesConfigured || editingLearners;
+
+  const saveRoles = () => {
+    const saved = editingLearners
+      ? round.replaceLearners(captainInput, crewInput)
+      : round.saveRoleSetup(captainInput, crewInput);
+    if (saved) setEditingLearners(false);
+  };
+
+  const endRound = () => {
+    if (!window.confirm('End this round without saving it to History?')) return;
+    round.endRound();
+    setEditingLearners(false);
+  };
 
   return (
     <main className="game-screen">
@@ -78,10 +113,67 @@ export default function GamePage() {
         {round.feedbackError && round.state !== 'results' && round.state !== 'crew-timeout' && <p className="game-error">{round.feedbackError}</p>}
       </div>
 
+      {showRoleSetup ? (
+        <section className="soft-card admin-section-minimal">
+          <div>
+            <p className="page-kicker">Role setup</p>
+            <h2 className="section-title">{editingLearners ? 'Change learners' : 'Who is playing?'}</h2>
+          </div>
+          <p className="admin-message">{editingLearners ? 'Save new learners to start a fresh comparison identity. Existing history stays under the previous names/IDs.' : 'Enter learner names before playing so CVR / CCI / CPD rounds can be saved and compared by role.'}</p>
+          <div className="admin-grid two-up">
+            <label className="field-stack">
+              <span>Captain name</span>
+              <input value={captainInput} onChange={(e) => setCaptainInput(e.target.value)} placeholder="Captain / prompt giver" maxLength={40} />
+            </label>
+            <label className="field-stack">
+              <span>Crew name</span>
+              <input value={crewInput} onChange={(e) => setCrewInput(e.target.value)} placeholder="Crew / responder" maxLength={40} />
+            </label>
+          </div>
+          <div className="action-row">
+            <button type="button" className="primary-pill-button" onClick={saveRoles} disabled={!captainInput.trim() || !crewInput.trim()}>
+              {editingLearners ? 'Save new learners' : 'Save roles'}
+            </button>
+            {editingLearners && (
+              <button type="button" className="ghost-pill-button" onClick={() => setEditingLearners(false)}>
+                Cancel
+              </button>
+            )}
+          </div>
+        </section>
+      ) : (
+        <section className="soft-card admin-section-minimal" style={{ padding: 16 }}>
+          <div className="action-row" style={{ justifyContent: 'space-between' }}>
+            <div>
+              <span className="soft-label" style={{ color: 'var(--red)' }}>Captain</span>
+              <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--red)' }}>{round.captainName}</div>
+            </div>
+            <div className="action-row" style={{ justifyContent: 'center' }}>
+              <button type="button" className="ghost-pill-button" onClick={() => round.swapRoles()} disabled={!canEditLearners}>
+                Swap roles
+              </button>
+              <button type="button" className="ghost-pill-button" onClick={() => setEditingLearners(true)} disabled={!canEditLearners}>
+                Change learners
+              </button>
+              {canEndRound && (
+                <button type="button" className="ghost-pill-button" onClick={endRound}>
+                  End round
+                </button>
+              )}
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <span className="soft-label" style={{ color: 'var(--blue)' }}>Crew</span>
+              <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--blue)' }}>{round.crewName}</div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {round.rolesConfigured && (
       <section className="playfield-shell">
         <RolePanel
           role="captain"
-          title="Captain"
+          title={round.captainName ? `Captain · ${round.captainName}` : 'Captain'}
           color="red"
           recording={round.captainRecorder.isRecording}
           active={round.state === 'captain-ready' || round.state === 'captain-recording'}
@@ -96,7 +188,7 @@ export default function GamePage() {
 
         <RolePanel
           role="crew"
-          title="Crew"
+          title={round.crewName ? `Crew · ${round.crewName}` : 'Crew'}
           color="blue"
           recording={round.crewRecorder.isRecording}
           active={round.state === 'crew-waiting' || round.state === 'crew-recording' || round.state === 'crew-processing' || round.state === 'evaluating'}
@@ -117,6 +209,7 @@ export default function GamePage() {
           </div>
         )}
       </section>
+      )}
 
       {overlay && (
         <div className="analysis-overlay" role="status" aria-live="polite">

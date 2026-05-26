@@ -16,6 +16,10 @@ function normalizeRound(round: Partial<RoundRecord>): RoundRecord {
     id: String(round.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`),
     createdAt: String(round.createdAt || new Date().toISOString()),
     state: (round.state || 'results') as RoundRecord['state'],
+    captainPlayerId: round.captainPlayerId ?? null,
+    crewPlayerId: round.crewPlayerId ?? null,
+    captainName: round.captainName ?? null,
+    crewName: round.crewName ?? null,
     captainTranscript: round.captainTranscript,
     crewTranscript: round.crewTranscript,
     captainVerifiedTranscript: round.captainVerifiedTranscript,
@@ -29,6 +33,14 @@ function normalizeRound(round: Partial<RoundRecord>): RoundRecord {
           difficulty: String(round.ohmResult.difficulty || 'Beginner'),
           score: Number(round.ohmResult.score || 0),
           chunkCount: Number(round.ohmResult.chunkCount || 0),
+          baseOhm: typeof round.ohmResult.baseOhm === 'number' ? round.ohmResult.baseOhm : undefined,
+          estimatedTC: typeof round.ohmResult.estimatedTC === 'number' ? round.ohmResult.estimatedTC : undefined,
+          confirmedTC: typeof round.ohmResult.confirmedTC === 'number' ? round.ohmResult.confirmedTC : undefined,
+          candidateTC: typeof round.ohmResult.candidateTC === 'number' ? round.ohmResult.candidateTC : undefined,
+          linguisticComplexity: typeof round.ohmResult.linguisticComplexity === 'number' ? round.ohmResult.linguisticComplexity : undefined,
+          tensionLoad: typeof round.ohmResult.tensionLoad === 'number' ? round.ohmResult.tensionLoad : undefined,
+          responseCoefficient: typeof round.ohmResult.responseCoefficient === 'number' ? round.ohmResult.responseCoefficient : undefined,
+          repeatCoefficient: typeof round.ohmResult.repeatCoefficient === 'number' ? round.ohmResult.repeatCoefficient : undefined,
           chunks: Array.isArray(round.ohmResult.chunks)
             ? round.ohmResult.chunks.map((chunk) => {
                 const label = ['GREEN', 'BLUE', 'RED', 'PINK'].includes(String(chunk.label))
@@ -43,6 +55,7 @@ function normalizeRound(round: Partial<RoundRecord>): RoundRecord {
             : [],
         }
       : undefined,
+    metrics: round.metrics,
     evaluation: round.evaluation,
     reactionDelayMs: typeof round.reactionDelayMs === 'number' ? round.reactionDelayMs : undefined,
     timeoutLost: round.timeoutLost === true,
@@ -95,17 +108,26 @@ export async function saveRound(round: RoundRecord) {
   }
 }
 
+export function loadCachedRounds(): RoundRecord[] {
+  return loadLocalHistory();
+}
+
 export async function loadRecentRounds(): Promise<RoundRecord[]> {
+  const cached = loadLocalHistory();
   if (db) {
-    const q = query(collection(db, 'rounds'), orderBy('createdAt', 'desc'), limit(20));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      const rounds = snap.docs.map((d) => normalizeRound(d.data() as RoundRecord));
-      saveLocalHistory(rounds);
-      return rounds;
+    try {
+      const q = query(collection(db, 'rounds'), orderBy('createdAt', 'desc'), limit(20));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const rounds = snap.docs.map((d) => normalizeRound(d.data() as RoundRecord));
+        saveLocalHistory(rounds);
+        return rounds;
+      }
+    } catch {
+      // Keep History usable when Firestore is slow or temporarily unavailable.
     }
   }
-  return loadLocalHistory();
+  return cached;
 }
 
 function loadLocalHistory(): RoundRecord[] {

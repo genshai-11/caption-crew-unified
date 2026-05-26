@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ResultCard } from '@/components/ResultCard';
-import { OhmChunkResult, SummaryLocationState, TranscriptResult } from '@/types';
+import { OhmChunkResult, RoundMetrics, SummaryLocationState, TranscriptResult } from '@/types';
 
 function formatConfidence(confidence?: number) {
   if (typeof confidence !== 'number' || Number.isNaN(confidence) || confidence <= 0) return '—';
@@ -39,49 +39,96 @@ function resolveCrewResponseCoefficient(delayMs: number | null) {
   return 1 - ratio * (2 / 3);
 }
 
+function formatMetricNumber(value: number, digits = 2) {
+  if (!Number.isFinite(value)) return '—';
+  return Number(value.toFixed(digits)).toString();
+}
+
+function normalizeCciCurrent(value?: number | null) {
+  const numeric = Number(value ?? 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return numeric > 1 ? numeric / 100 : numeric;
+}
+
 function SummaryOhmCard({
   totalOhm,
   current,
   chunks,
   reactionDelayMs,
+  metrics,
 }: {
   totalOhm: number;
   current: number;
   chunks: OhmChunkResult[];
   reactionDelayMs: number | null;
+  metrics?: RoundMetrics | null;
 }) {
-  const responseCoefficient = resolveCrewResponseCoefficient(reactionDelayMs);
+  const [mseCoefficient, setMseCoefficient] = useState(metrics?.cci.mse.coefficient ?? 1);
+  const cvr = metrics?.cvr.rawUnits ?? totalOhm;
+  const estimatedTC = metrics?.cvr.estimatedTC ?? chunks.reduce((sum, chunk) => sum + Number(chunk.ohm || 0), 0);
+  const lc = metrics?.cvr.linguisticComplexity ?? metrics?.cvr.lengthCoefficient ?? current;
+  const responseCoefficient = metrics?.cvr.responseTimeCoefficient ?? metrics?.cvr.responseCoefficient ?? resolveCrewResponseCoefficient(reactionDelayMs);
+  const repeatCoefficient = metrics?.cvr.repeatCoefficient ?? 1;
+  const denominator = Math.max(estimatedTC * lc * responseCoefficient * repeatCoefficient, 0.0001);
+  const tl = metrics?.cvr.tensionLoad ?? (cvr > 0 && estimatedTC > 0 ? cvr / denominator : 1);
+  const meaningPercent = metrics?.cci.llmMeaningPercent ?? 0;
+  const meaningDecimal = meaningPercent / 100;
+  const cciCurrent = meaningDecimal * Math.max(0, Number(mseCoefficient || 0));
+  const cpd = cciCurrent * cvr;
+
   return (
-    <section className="soft-card admin-section-minimal">
+    <section className="soft-card admin-section-minimal metric-formula-card">
       <div className="summary-voice-header">
         <div>
-          <p className="page-kicker summary-voice-kicker">Semantic Ohm</p>
-          <h2 className="section-title">Total Ohm</h2>
+          <p className="page-kicker summary-voice-kicker">Chunks Law breakdown</p>
+          <h2 className="section-title metric-system-title"><span className="metric-cvr">CVR (Ω)</span> · <span className="metric-cci">CCI (A)</span> · <span className="metric-cpd">CPD (V)</span></h2>
         </div>
+      </div>
+
+      <div className="metric-formula-hero metric-cvr">
+        <span className="metric-label metric-title metric-cvr">CVR ({metrics?.cvr.unit || 'Ω'})</span>
+        <span className="metric-value metric-formula-value">{formatMetricNumber(cvr)} {metrics?.cvr.unit || 'Ω'}</span>
+        <span className="metric-formula-detail">
+          detail: {formatMetricNumber(estimatedTC)} (TC) × {formatMetricNumber(lc)} (LC) × {formatMetricNumber(tl)} (TL) × {formatMetricNumber(responseCoefficient)} (RT) × {formatMetricNumber(repeatCoefficient)} (RC) = {formatMetricNumber(cvr)} Ω
+        </span>
       </div>
 
       <div className="analysis-metrics summary-inline-metrics">
         <div>
-          <span className="metric-label">total ohm</span>
-          <span className="metric-value">{totalOhm} Ω</span>
+          <span className="metric-label metric-cci">Meaning %</span>
+          <span className="metric-value metric-cci">{formatMetricNumber(meaningPercent)}%</span>
+        </div>
+        <label className="field-stack metric-mse-input">
+          <span>MSE coefficient</span>
+          <input
+            type="number"
+            min="0"
+            step="0.05"
+            value={mseCoefficient}
+            onChange={(event) => setMseCoefficient(Number(event.target.value))}
+          />
+        </label>
+        <div>
+          <span className="metric-label metric-title metric-cci">CCI ({metrics?.cci.unit || 'A'})</span>
+          <span className="metric-value metric-cci">
+            {formatMetricNumber(meaningDecimal, 4)} × {formatMetricNumber(Number(mseCoefficient || 0), 2)} MSE = {formatMetricNumber(cciCurrent, 4)} {metrics?.cci.unit || 'A'}
+          </span>
         </div>
         <div>
-          <span className="metric-label">(length coefficient)</span>
-          <span className="metric-value">{current.toFixed(2)}</span>
-        </div>
-        <div>
-          <span className="metric-label">(crew response coefficient)</span>
-          <span className="metric-value">{responseCoefficient.toFixed(2)}</span>
+          <span className="metric-label metric-title metric-cpd">CPD ({metrics?.cpd.unit || 'V'})</span>
+          <span className="metric-value metric-cpd">
+            {formatMetricNumber(cciCurrent, 4)} × {formatMetricNumber(cvr)} Ω = {formatMetricNumber(cpd)} {metrics?.cpd.unit || 'V'}
+          </span>
         </div>
         <div>
           <span className="metric-label">reaction delay</span>
           <span className="metric-value">{formatReactionDelay(reactionDelayMs)}</span>
         </div>
+        <div>
+          <span className="metric-label">repeat coefficient</span>
+          <span className="metric-value">{formatMetricNumber(repeatCoefficient)} <small className="muted-copy">default</small></span>
+        </div>
       </div>
-
-      <p className="admin-message" style={{ marginTop: 8 }}>
-        Linear rule: ≤2.0s → 1.00, ≥5.0s → 0.33, and 2.0s–5.0s decreases linearly.
-      </p>
 
       <div className="summary-transcript-block">
         <span className="metric-label">detected chunks</span>
@@ -221,14 +268,14 @@ export default function AnalysisSummaryPage() {
       {(summary?.captainTranscript || summary?.crewTranscript || summary?.captainAudioBlob || summary?.crewAudioBlob) && (
         <section className="summary-two-up">
           <SummaryVoiceCard
-            title="Component 1"
-            subtitle="Captain · Vietnamese input"
+            title="Vietnamese input"
+            subtitle={`Captain${summary?.captainName ? ` · ${summary.captainName}` : ''}`}
             transcript={summary?.captainTranscript}
             audioUrl={captainAudioUrl}
           />
           <SummaryVoiceCard
-            title="Component 2"
-            subtitle="Crew · English response"
+            title="English response"
+            subtitle={`Crew${summary?.crewName ? ` · ${summary.crewName}` : ''}`}
             transcript={summary?.crewTranscript}
             audioUrl={crewAudioUrl}
           />
@@ -241,6 +288,7 @@ export default function AnalysisSummaryPage() {
           current={summary.ohmResult.current}
           chunks={summary.ohmResult.chunks}
           reactionDelayMs={summary.reactionDelayMs}
+          metrics={summary.metrics || null}
         />
       )}
 

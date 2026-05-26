@@ -52,8 +52,12 @@ export interface OhmAnalysisResult {
   responseCoefficientApplied?: boolean;
   agentDiagnostics?: Record<string, unknown>;
   baseOhm?: number;
+  estimatedTC?: number;
+  confirmedTC?: number;
+  candidateTC?: number;
   lengthBucket?: 'veryShort' | 'short' | 'medium' | 'long' | 'overLong';
   lengthCoefficient?: number;
+  topicLevel?: number;
   verifierAppliedCount?: number;
   uncertainChunkCount?: number;
   chunkDiagnostics?: Array<Record<string, unknown>>;
@@ -227,8 +231,12 @@ export async function analyzeTranscriptClient(config: SharedOhmConfig, transcrip
     responseCoefficientApplied: data.responseCoefficientApplied === true,
     agentDiagnostics: data.agentDiagnostics && typeof data.agentDiagnostics === 'object' ? data.agentDiagnostics : undefined,
     baseOhm: typeof data.baseOhm === 'number' ? data.baseOhm : undefined,
+    estimatedTC: typeof data.estimatedTC === 'number' ? data.estimatedTC : typeof data.agentDiagnostics?.tcBreakdown?.estimatedTC === 'number' ? data.agentDiagnostics.tcBreakdown.estimatedTC : undefined,
+    confirmedTC: typeof data.confirmedTC === 'number' ? data.confirmedTC : typeof data.agentDiagnostics?.tcBreakdown?.confirmedTC === 'number' ? data.agentDiagnostics.tcBreakdown.confirmedTC : undefined,
+    candidateTC: typeof data.candidateTC === 'number' ? data.candidateTC : typeof data.agentDiagnostics?.tcBreakdown?.candidateTC === 'number' ? data.agentDiagnostics.tcBreakdown.candidateTC : undefined,
     lengthBucket: typeof data.lengthBucket === 'string' ? data.lengthBucket : undefined,
     lengthCoefficient: typeof data.lengthCoefficient === 'number' ? data.lengthCoefficient : undefined,
+    topicLevel: typeof data.topicLevel === 'number' ? data.topicLevel : typeof data.agentDiagnostics?.tlBreakdown?.tlValue === 'number' ? data.agentDiagnostics.tlBreakdown.tlValue : undefined,
     verifierAppliedCount: typeof data.verifierAppliedCount === 'number' ? data.verifierAppliedCount : undefined,
     uncertainChunkCount: typeof data.uncertainChunkCount === 'number' ? data.uncertainChunkCount : undefined,
     chunkDiagnostics: Array.isArray(data.chunkDiagnostics) ? data.chunkDiagnostics : undefined,

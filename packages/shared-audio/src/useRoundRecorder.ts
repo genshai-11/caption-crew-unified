@@ -148,11 +148,28 @@ export function useRoundRecorder() {
 
   const reset = useCallback(() => {
     chunkHandlerRef.current = null;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.ondataavailable = null;
+      mediaRecorderRef.current.onstop = null;
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {
+        // ignore recorder stop errors during discard/reset
+      }
+    }
+    mediaRecorderRef.current = null;
+    chunksRef.current = [];
+    startedAtRef.current = null;
+    if (timerRef.current) window.clearInterval(timerRef.current);
+    timerRef.current = null;
+    clearVisualizer();
+    stopStream();
+    setIsRecording(false);
     setAudioBlob(null);
     setRecordingTimeMs(0);
     setError(null);
     setLevels(createIdleLevels());
-  }, []);
+  }, [clearVisualizer, stopStream]);
 
   useEffect(() => {
     return () => {

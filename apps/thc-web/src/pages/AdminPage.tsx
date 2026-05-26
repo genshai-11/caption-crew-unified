@@ -495,8 +495,8 @@ export default function AdminPage() {
               <>
                 <div className="admin-grid two-up">
                   <div className="field-stack">
-                    <span>Total Ohm</span>
-                    <strong>{analysisResult.totalOhm}</strong>
+                    <span className="metric-cvr">CVR raw units (Ω)</span>
+                    <strong className="metric-cvr">{analysisResult.totalOhm} Ω</strong>
                   </div>
                   <div className="field-stack">
                     <span>Formula</span>

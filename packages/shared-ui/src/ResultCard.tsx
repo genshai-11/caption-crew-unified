@@ -37,7 +37,7 @@ export function ResultCard({ evaluation, reactionDelayMs, onReset }: ResultCardP
   return (
     <section className="analysis-card">
       <div className="analysis-topline">
-        <span className="analysis-label">llm meaning analysis</span>
+        <span className="analysis-label">CCI meaning analysis</span>
         <span className={`analysis-pill decision-${evaluation.decision}`}>{evaluation.decision}</span>
       </div>
 
@@ -45,7 +45,7 @@ export function ResultCard({ evaluation, reactionDelayMs, onReset }: ResultCardP
         <div className="analysis-score" aria-label={`meaning match ${scorePercent} percent`}>
           <span>{scorePercent}</span><span className="analysis-score-unit">%</span>
         </div>
-        <div className="analysis-caption">meaning match · 100% scale</div>
+        <div className="analysis-caption">LLM meaning % · MSE applied in CCI metric</div>
       </div>
 
       <div className="analysis-metrics">

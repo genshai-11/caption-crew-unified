@@ -1,4 +1,4 @@
-import type { MeaningEvaluation, OhmResult, TranscriptResult } from '@/types';
+import type { MeaningEvaluation, OhmResult, RoundMetrics, TranscriptResult } from '@/types';
 
 export type RoomStatus = 'waiting' | 'playing' | 'finished';
 export type RoundStatus = 'captain_speaking' | 'crew_speaking' | 'evaluating' | 'finished';
@@ -31,6 +31,8 @@ export interface RoomRoundDoc {
   winnerRole?: 'captain' | 'crew' | 'none';
   endReason?: 'meaning' | 'crew_timeout' | 'manual';
 
+  captainPlayerId?: string | null;
+  crewPlayerId?: string | null;
   captainTranscript?: string;
   crewTranscript?: string;
   captainTranscriptMeta?: TranscriptResult;
@@ -45,5 +47,6 @@ export interface RoomRoundDoc {
   feedback?: string;
   meaningAnalysis?: MeaningEvaluation;
   ohmResult?: OhmResult | null;
+  metrics?: RoundMetrics | null;
   reactionDelayMs?: number;
 }
