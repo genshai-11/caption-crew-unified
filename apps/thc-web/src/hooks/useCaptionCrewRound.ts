@@ -84,6 +84,7 @@ export function useCaptionCrewRound() {
   const countdownIntervalRef = useRef<number | null>(null);
   const captainBatchTranscriptPromiseRef = useRef<Promise<TranscriptResult> | null>(null);
   const captainPrimaryTranscriptPromiseRef = useRef<Promise<TranscriptResult> | null>(null);
+  const captainOhmPromiseRef = useRef<Promise<OhmAnalysisResult | null> | null>(null);
   const captainStreamingSessionRef = useRef<DeepgramStreamingSession | null>(null);
   const crewStreamingSessionRef = useRef<DeepgramStreamingSession | null>(null);
   const activeRoundTokenRef = useRef(0);
@@ -268,6 +269,7 @@ export function useCaptionCrewRound() {
     captainStoppedAtRef.current = null;
     captainBatchTranscriptPromiseRef.current = null;
     captainPrimaryTranscriptPromiseRef.current = null;
+    captainOhmPromiseRef.current = null;
     clearCrewTimers();
   }, [captainRecorder, clearCrewTimers, crewRecorder]);
 
@@ -350,6 +352,24 @@ export function useCaptionCrewRound() {
       captainPrimaryTranscriptPromiseRef.current = singlePromise;
       void singlePromise.catch(() => undefined);
     }
+
+    // Fire OHM analysis as soon as captain transcript is ready — crew recording is free compute time.
+    // reactionDelayMs is not known yet; response coefficient is applied client-side in stopCrew.
+    const ohmPrefetchToken = activeRoundTokenRef.current;
+    void captainPrimaryTranscriptPromiseRef.current
+      ?.then((captainResult) => {
+        if (activeRoundTokenRef.current !== ohmPrefetchToken) return;
+        const rc = loadAdminRuntimeConfig();
+        captainOhmPromiseRef.current = analyzeTranscript(captainResult.transcript, {
+          model: rc.ohmModel || rc.router9Model,
+          fallbackModel: rc.ohmFallbackModel || rc.router9FallbackModel,
+          reactionDelayMs: null,
+          useMemoryAssist: rc.ohmAgentEnabled,
+          returnDebug: true,
+          sessionId: ohmPrefetchToken.toString(),
+        }).catch(() => null);
+      })
+      .catch(() => undefined);
 
     const waitingStartedAt = Date.now();
     timeoutRef.current = window.setTimeout(() => {
