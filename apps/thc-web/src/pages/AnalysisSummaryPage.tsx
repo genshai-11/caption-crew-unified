@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ResultCard } from '@/components/ResultCard';
-import { OhmChunkResult, RoundMetrics, SummaryLocationState, TranscriptResult } from '@/types';
+import { useRoundContext } from '@/context/RoundContext';
+import { OhmChunkResult, RoundMetrics, TranscriptResult } from '@/types';
 
 function formatConfidence(confidence?: number) {
   if (typeof confidence !== 'number' || Number.isNaN(confidence) || confidence <= 0) return '—';
@@ -42,12 +43,6 @@ function resolveCrewResponseCoefficient(delayMs: number | null) {
 function formatMetricNumber(value: number, digits = 2) {
   if (!Number.isFinite(value)) return '—';
   return Number(value.toFixed(digits)).toString();
-}
-
-function normalizeCciCurrent(value?: number | null) {
-  const numeric = Number(value ?? 0);
-  if (!Number.isFinite(numeric)) return 0;
-  return numeric > 1 ? numeric / 100 : numeric;
 }
 
 function SummaryOhmCard({
@@ -200,46 +195,46 @@ function SummaryVoiceCard({
 }
 
 export default function AnalysisSummaryPage() {
-  const location = useLocation();
   const navigate = useNavigate();
-  const summary = (location.state || null) as SummaryLocationState | null;
+  const round = useRoundContext();
   const [captainAudioUrl, setCaptainAudioUrl] = useState<string | null>(null);
   const [crewAudioUrl, setCrewAudioUrl] = useState<string | null>(null);
 
-  const hasContent = useMemo(() => !!summary?.evaluation || !!summary?.errorMessage, [summary]);
+  const hasContent = !!round.evaluation || !!round.feedbackError
+    || !!round.captainTranscript || !!round.ohmResult;
 
   useEffect(() => {
-    if (summary?.captainAudioUrl) {
-      setCaptainAudioUrl(summary.captainAudioUrl);
+    if (round.captainAudioUrl) {
+      setCaptainAudioUrl(round.captainAudioUrl);
       return undefined;
     }
-    if (!summary?.captainAudioBlob) {
+    if (!round.captainAudioBlob) {
       setCaptainAudioUrl(null);
       return undefined;
     }
 
-    const url = URL.createObjectURL(summary.captainAudioBlob);
+    const url = URL.createObjectURL(round.captainAudioBlob);
     setCaptainAudioUrl(url);
     return () => URL.revokeObjectURL(url);
-  }, [summary?.captainAudioBlob, summary?.captainAudioUrl]);
+  }, [round.captainAudioBlob, round.captainAudioUrl]);
 
   useEffect(() => {
-    if (summary?.crewAudioUrl) {
-      setCrewAudioUrl(summary.crewAudioUrl);
+    if (round.crewAudioUrl) {
+      setCrewAudioUrl(round.crewAudioUrl);
       return undefined;
     }
-    if (!summary?.crewAudioBlob) {
+    if (!round.crewAudioBlob) {
       setCrewAudioUrl(null);
       return undefined;
     }
 
-    const url = URL.createObjectURL(summary.crewAudioBlob);
+    const url = URL.createObjectURL(round.crewAudioBlob);
     setCrewAudioUrl(url);
     return () => URL.revokeObjectURL(url);
-  }, [summary?.crewAudioBlob, summary?.crewAudioUrl]);
+  }, [round.crewAudioBlob, round.crewAudioUrl]);
 
   if (!hasContent) {
-    return <Navigate to="/" replace />;
+    return null;
   }
 
   return (
@@ -254,9 +249,9 @@ export default function AnalysisSummaryPage() {
         </div>
       </header>
 
-      {summary?.errorMessage && (
+      {round.feedbackError && (
         <section className="soft-card admin-section-minimal">
-          <p className="game-error summary-error">{summary.errorMessage}</p>
+          <p className="game-error summary-error">{round.feedbackError}</p>
           <div className="action-row">
             <button type="button" className="primary-pill-button" onClick={() => navigate('/', { replace: true })}>
               Back to game
@@ -265,39 +260,49 @@ export default function AnalysisSummaryPage() {
         </section>
       )}
 
-      {(summary?.captainTranscript || summary?.crewTranscript || summary?.captainAudioBlob || summary?.crewAudioBlob) && (
+      {(round.captainTranscript || round.crewTranscript || round.captainAudioBlob || round.crewAudioBlob) && (
         <section className="summary-two-up">
           <SummaryVoiceCard
             title="Vietnamese input"
-            subtitle={`Captain${summary?.captainName ? ` · ${summary.captainName}` : ''}`}
-            transcript={summary?.captainTranscript}
+            subtitle={`Captain${round.captainName ? ` · ${round.captainName}` : ''}`}
+            transcript={round.captainTranscript}
             audioUrl={captainAudioUrl}
           />
           <SummaryVoiceCard
             title="English response"
-            subtitle={`Crew${summary?.crewName ? ` · ${summary.crewName}` : ''}`}
-            transcript={summary?.crewTranscript}
+            subtitle={`Crew${round.crewName ? ` · ${round.crewName}` : ''}`}
+            transcript={round.crewTranscript}
             audioUrl={crewAudioUrl}
           />
         </section>
       )}
 
-      {summary?.ohmResult && (
+      {round.ohmResult && (
         <SummaryOhmCard
-          totalOhm={summary.ohmResult.totalOhm}
-          current={summary.ohmResult.current}
-          chunks={summary.ohmResult.chunks}
-          reactionDelayMs={summary.reactionDelayMs}
-          metrics={summary.metrics || null}
+          totalOhm={round.ohmResult.totalOhm}
+          current={round.ohmResult.current}
+          chunks={round.ohmResult.chunks}
+          reactionDelayMs={round.reactionDelayMs}
+          metrics={round.metrics || null}
         />
       )}
 
-      {summary?.evaluation && (
+      {round.evaluation ? (
         <ResultCard
-          evaluation={summary.evaluation}
-          reactionDelayMs={summary.reactionDelayMs}
+          evaluation={round.evaluation}
+          reactionDelayMs={round.reactionDelayMs}
           onReset={() => navigate('/', { replace: true })}
         />
+      ) : (
+        <section className="soft-card admin-section-minimal analysis-loading-card">
+          <div className="spiral-loader" aria-hidden="true">
+            <span className="spiral-ring spiral-ring-blue" />
+            <span className="spiral-ring spiral-ring-red" />
+            <span className="spiral-core" />
+          </div>
+          <p className="analysis-overlay-title">đang phân tích meaning</p>
+          <p className="analysis-overlay-subtitle">CCI · CPD đang được tính toán</p>
+        </section>
       )}
     </main>
   );
