@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { RefreshCw, Users, X } from 'lucide-react';
 import { RolePanel } from '@/components/RolePanel';
 import { useCaptionCrewRound } from '@/hooks/useCaptionCrewRound';
 import { SummaryLocationState } from '@/types';
@@ -142,29 +143,47 @@ export default function GamePage() {
           </div>
         </section>
       ) : (
-        <section className="soft-card admin-section-minimal" style={{ padding: 16 }}>
-          <div className="action-row" style={{ justifyContent: 'space-between' }}>
-            <div>
-              <span className="soft-label" style={{ color: 'var(--red)' }}>Captain</span>
-              <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--red)' }}>{round.captainName}</div>
-            </div>
-            <div className="action-row" style={{ justifyContent: 'center' }}>
-              <button type="button" className="ghost-pill-button" onClick={() => round.swapRoles()} disabled={!canEditLearners}>
-                Swap roles
+        <section className="soft-card admin-section-minimal learner-compact-bar">
+          <div className="learner-compact-side learner-compact-side-left">
+            <span className="soft-label learner-compact-role learner-compact-role-captain">Captain</span>
+            <div className="learner-compact-name learner-compact-name-captain">{round.captainName}</div>
+          </div>
+          <div className="learner-compact-actions" aria-label="Learner actions">
+            <button
+              type="button"
+              className="ghost-pill-button icon-only-button"
+              onClick={() => round.swapRoles()}
+              disabled={!canEditLearners}
+              title="Swap roles"
+              aria-label="Swap roles"
+            >
+              <RefreshCw size={18} />
+            </button>
+            <button
+              type="button"
+              className="ghost-pill-button icon-only-button"
+              onClick={() => setEditingLearners(true)}
+              disabled={!canEditLearners}
+              title="Change learners"
+              aria-label="Change learners"
+            >
+              <Users size={18} />
+            </button>
+            {canEndRound && (
+              <button
+                type="button"
+                className="ghost-pill-button icon-only-button"
+                onClick={endRound}
+                title="End round"
+                aria-label="End round"
+              >
+                <X size={18} />
               </button>
-              <button type="button" className="ghost-pill-button" onClick={() => setEditingLearners(true)} disabled={!canEditLearners}>
-                Change learners
-              </button>
-              {canEndRound && (
-                <button type="button" className="ghost-pill-button" onClick={endRound}>
-                  End round
-                </button>
-              )}
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <span className="soft-label" style={{ color: 'var(--blue)' }}>Crew</span>
-              <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--blue)' }}>{round.crewName}</div>
-            </div>
+            )}
+          </div>
+          <div className="learner-compact-side learner-compact-side-right">
+            <span className="soft-label learner-compact-role learner-compact-role-crew">Crew</span>
+            <div className="learner-compact-name learner-compact-name-crew">{round.crewName}</div>
           </div>
         </section>
       )}

@@ -602,6 +602,57 @@ input:focus, select:focus {
   font-size: 22px;
   font-weight: 500;
 }
+.learner-compact-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+}
+.learner-compact-side {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.learner-compact-side-right {
+  text-align: right;
+}
+.learner-compact-role {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.learner-compact-role-captain { color: var(--red); }
+.learner-compact-role-crew { color: var(--blue); }
+.learner-compact-name {
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.learner-compact-name-captain { color: var(--red); }
+.learner-compact-name-crew { color: var(--blue); }
+.learner-compact-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+.icon-only-button {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.icon-only-button svg {
+  flex: 0 0 auto;
+}
 .summary-audio-block,
 .summary-transcript-block,
 .analysis-detail-block {
@@ -775,6 +826,26 @@ input:focus, select:focus {
   .admin-grid.two-up, .analysis-metrics, .history-metric-row, .summary-two-up, .analysis-grid-two-up, .summary-inline-metrics, .history-two-up { grid-template-columns: 1fr; }
   .game-screen { width: calc(100% - 16px); }
   .screen-shell { width: calc(100% - 20px); }
+  .learner-compact-bar {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 8px;
+    padding: 12px;
+  }
+  .learner-compact-role {
+    font-size: 10px;
+  }
+  .learner-compact-name {
+    font-size: 13px;
+  }
+  .learner-compact-actions {
+    gap: 6px;
+  }
+  .icon-only-button {
+    width: 38px;
+    min-width: 38px;
+    height: 38px;
+    min-height: 38px;
+  }
   .role-surface { min-height: 28vh; }
   .chunks-brand-block { gap: 12px; }
 }
