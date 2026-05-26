@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, NavLink, Route, Routes } from 'react-router-dom';
 import { AdminAuthProvider, useAdminAuth } from '@/auth/AdminAuthContext';
 import { RequireAdmin } from '@/auth/RequireAdmin';
+import { RoundContextProvider } from '@/context/RoundContext';
 import AdminPage from '@/pages/AdminPage';
 import AdminLoginPage from '@/pages/AdminLoginPage';
 import AnalysisSummaryPage from '@/pages/AnalysisSummaryPage';
@@ -40,21 +41,23 @@ function AppShell() {
 
   return (
     <div className={`app-shell theme-${visualTheme}`}>
-      <Routes>
-        <Route path="/" element={<GamePage />} />
-        <Route path="/summary" element={<AnalysisSummaryPage />} />
-        <Route path="/history" element={<HistoryPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/admin-login" element={<AdminLoginPage />} />
-        <Route
-          path="/admin"
-          element={(
-            <RequireAdmin>
-              <AdminPage />
-            </RequireAdmin>
-          )}
-        />
-      </Routes>
+      <RoundContextProvider>
+        <Routes>
+          <Route path="/" element={<GamePage />} />
+          <Route path="/summary" element={<AnalysisSummaryPage />} />
+          <Route path="/history" element={<HistoryPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/admin-login" element={<AdminLoginPage />} />
+          <Route
+            path="/admin"
+            element={(
+              <RequireAdmin>
+                <AdminPage />
+              </RequireAdmin>
+            )}
+          />
+        </Routes>
+      </RoundContextProvider>
       <nav className={`bottom-nav ${isAdmin ? 'bottom-nav-four' : 'bottom-nav-three'}`}>
         <NavLink to="/">Game</NavLink>
         <NavLink to="/history">History</NavLink>
