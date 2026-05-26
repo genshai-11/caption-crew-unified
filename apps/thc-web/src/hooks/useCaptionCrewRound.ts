@@ -395,6 +395,7 @@ export function useCaptionCrewRound() {
   }, [beginStreamingSession, clearCrewTimers, crewRecorder, settings.maxCrewStartDelayMs, state]);
 
   const stopCrew = useCallback(async () => {
+    performance.mark('stopCrew:start');
     setState('crew-processing');
     const crewBlob = await crewRecorder.stop();
     if (!crewBlob) {
@@ -463,6 +464,8 @@ export function useCaptionCrewRound() {
       }
 
       const [captainResult, crewResult] = await Promise.all([captainPromise, crewPromise]);
+      performance.mark('stopCrew:transcripts-done');
+      performance.measure('transcripts', 'stopCrew:start', 'stopCrew:transcripts-done');
 
       setCaptainTranscript(captainResult);
       setCrewTranscript(crewResult);
@@ -577,6 +580,8 @@ export function useCaptionCrewRound() {
       }
 
       setOhmResult(nextOhmResult);
+      performance.mark('stopCrew:ohm-done');
+      performance.measure('ohm-analysis', 'stopCrew:transcripts-done', 'stopCrew:ohm-done');
 
       setState('evaluating');
 
@@ -585,6 +590,9 @@ export function useCaptionCrewRound() {
         crewTranscript: crewResult.transcript,
         strictness: settings.strictness,
       });
+      performance.mark('stopCrew:meaning-done');
+      performance.measure('meaning-eval', 'stopCrew:ohm-done', 'stopCrew:meaning-done');
+      performance.measure('total-after-transcripts', 'stopCrew:transcripts-done', 'stopCrew:meaning-done');
 
       const nextMetrics = buildRoundMetrics({
         ohmResult: nextOhmResult,
