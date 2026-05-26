@@ -4,7 +4,7 @@ import { uploadRoundAudio } from '@/services/roundAudioStorage';
 import { defaultGameSettings, loadSettings, saveRound } from '@/services/roundRepository';
 import { createDeepgramStreamingSession, DeepgramStreamingSession } from '@/services/deepgramStreamingService';
 import { transcribeRoundAudio } from '@/services/transcriptionService';
-import { analyzeTranscript } from '@/services/aiService';
+import { analyzeTranscript, type OhmAnalysisResult } from '@/services/aiService';
 import { calculateSemanticOhm, detectSemanticChunksFromCaptain, getDifficultyLabel } from '@/lib/ohmCalculator';
 import { buildRoundMetrics, GameSettings, MeaningEvaluation, OhmResult, RoundMetrics, RoundRecord, RoundState, TranscriptResult } from '@/types';
 import { loadAdminRuntimeConfig } from '@/services/adminConfigRepository';
@@ -40,6 +40,83 @@ function resolveCrewResponseCoefficient(
 }
 
 const ROLE_SETUP_KEY = 'cc-faceoff-role-setup-v1';
+
+function buildLocalOhmFallback(
+  transcript: string,
+  reactionDelayMs: number | null,
+  runtimeConfig: ReturnType<typeof loadAdminRuntimeConfig>,
+): OhmResult {
+  const localResponseCoefficient = resolveCrewResponseCoefficient(reactionDelayMs, runtimeConfig.ohmResponseTiming);
+  const semanticChunks = detectSemanticChunksFromCaptain(transcript, runtimeConfig.semanticRuleOverrides);
+  const sentences = String(transcript || '').split(/[.!?\n\r]+/).map((s) => s.trim()).filter(Boolean).length || 1;
+  const words = String(transcript || '').trim().split(/\s+/).filter(Boolean).length;
+  const { ohmLengthConstraints: constraints, ohmLengthCoefficients: coef } = runtimeConfig;
+  let lengthCoefficient = coef.medium;
+  if (sentences <= constraints.veryShort.maxSentences && words <= constraints.veryShort.maxWords) lengthCoefficient = coef.veryShort;
+  else if (sentences <= constraints.short.maxSentences && words <= constraints.short.maxWords) lengthCoefficient = coef.short;
+  else if (sentences <= constraints.long.maxSentences && words <= constraints.long.maxWords) lengthCoefficient = coef.long;
+  else if (sentences > constraints.long.maxSentences || words > constraints.long.maxWords) lengthCoefficient = coef.overLong;
+  const rawOhm = calculateSemanticOhm(semanticChunks, lengthCoefficient);
+  const adjustedTotalOhm = Number((rawOhm.totalOhm * localResponseCoefficient).toFixed(4));
+  return {
+    ...rawOhm,
+    totalOhm: adjustedTotalOhm,
+    formula: localResponseCoefficient < 0.999
+      ? `${rawOhm.formula} x ${localResponseCoefficient.toFixed(2)}`
+      : rawOhm.formula,
+    voltage: adjustedTotalOhm,
+    score: toOhmScore(adjustedTotalOhm),
+    difficulty: getDifficultyLabel(adjustedTotalOhm),
+    chunkCount: semanticChunks.length,
+    baseOhm: rawOhm.totalOhm / Math.max(lengthCoefficient, 0.0001),
+    estimatedTC: rawOhm.totalOhm / Math.max(lengthCoefficient, 0.0001),
+    linguisticComplexity: lengthCoefficient,
+    tensionLoad: 1,
+    responseCoefficient: localResponseCoefficient,
+    repeatCoefficient: 1,
+    chunks: semanticChunks.map((chunk) => ({ text: chunk.text, label: chunk.label, ohm: chunk.ohm || 0 })),
+  };
+}
+
+function buildOhmResultFromAiAnalysis(
+  aiAnalysis: OhmAnalysisResult,
+  localResponseCoefficient: number,
+): OhmResult {
+  const lengthCoefficient = typeof aiAnalysis.lengthCoefficient === 'number' && aiAnalysis.lengthCoefficient > 0
+    ? aiAnalysis.lengthCoefficient : 1;
+  const serverAppliedResponse = aiAnalysis.responseCoefficientApplied === true;
+  const responseCoefficient = serverAppliedResponse
+    ? (typeof aiAnalysis.responseCoefficient === 'number' && aiAnalysis.responseCoefficient > 0
+        ? aiAnalysis.responseCoefficient : 1)
+    : localResponseCoefficient;
+  const adjustedTotalOhm = serverAppliedResponse
+    ? Number(aiAnalysis.totalOhm.toFixed(4))
+    : Number((aiAnalysis.totalOhm * responseCoefficient).toFixed(4));
+  return {
+    totalOhm: adjustedTotalOhm,
+    formula: responseCoefficient < 0.999
+      ? `${aiAnalysis.formula} x ${responseCoefficient.toFixed(2)}`
+      : aiAnalysis.formula,
+    current: lengthCoefficient,
+    voltage: adjustedTotalOhm,
+    score: toOhmScore(adjustedTotalOhm),
+    difficulty: getDifficultyLabel(adjustedTotalOhm),
+    chunkCount: aiAnalysis.chunks.length,
+    baseOhm: typeof aiAnalysis.baseOhm === 'number' ? aiAnalysis.baseOhm : undefined,
+    estimatedTC: typeof aiAnalysis.estimatedTC === 'number' ? aiAnalysis.estimatedTC
+      : typeof aiAnalysis.baseOhm === 'number' ? aiAnalysis.baseOhm : undefined,
+    confirmedTC: typeof aiAnalysis.confirmedTC === 'number' ? aiAnalysis.confirmedTC : undefined,
+    candidateTC: typeof aiAnalysis.candidateTC === 'number' ? aiAnalysis.candidateTC : undefined,
+    linguisticComplexity: lengthCoefficient,
+    tensionLoad: typeof aiAnalysis.topicLevel === 'number' ? aiAnalysis.topicLevel : undefined,
+    responseCoefficient,
+    repeatCoefficient: 1,
+    chunks: aiAnalysis.chunks
+      .map((chunk) => ({ ...chunk, label: String(chunk.label || '').toUpperCase() }))
+      .filter((chunk) => ['GREEN', 'BLUE', 'RED', 'PINK'].includes(chunk.label))
+      .map((chunk) => ({ text: chunk.text, label: chunk.label as 'GREEN' | 'BLUE' | 'RED' | 'PINK', ohm: Number(chunk.ohm || 0) })),
+  };
+}
 
 function shouldUseDeepgramLivePartial() {
   const config = loadAdminRuntimeConfig();
@@ -494,125 +571,42 @@ export function useCaptionCrewRound() {
       }
 
       const runtimeConfig = loadAdminRuntimeConfig();
+
+      // === PHASE 1: show results immediately with local sync OHM fallback ===
+      const localOhmResult = buildLocalOhmFallback(captainResult.transcript, reactionDelayMs, runtimeConfig);
+      setOhmResult(localOhmResult);
+      setState('results');  // navigate fires here; evaluation skeleton shown on summary page
+
+      // === PHASE 2: parallel AI calls — OHM likely already prefetched during crew recording ===
       const localResponseCoefficient = resolveCrewResponseCoefficient(reactionDelayMs, runtimeConfig.ohmResponseTiming);
-      const resolveLengthCoefficient = (text: string) => {
-        const sentences = String(text || '').split(/[.!?\n\r]+/).map((s) => s.trim()).filter(Boolean).length || 1;
-        const words = String(text || '').trim().split(/\s+/).filter(Boolean).length;
-        const constraints = runtimeConfig.ohmLengthConstraints;
-        const coef = runtimeConfig.ohmLengthCoefficients;
-
-        if (sentences <= constraints.veryShort.maxSentences && words <= constraints.veryShort.maxWords) return coef.veryShort;
-        if (sentences <= constraints.short.maxSentences && words <= constraints.short.maxWords) return coef.short;
-        if (sentences <= constraints.medium.maxSentences && words <= constraints.medium.maxWords) return coef.medium;
-        if (sentences <= constraints.long.maxSentences && words <= constraints.long.maxWords) return coef.long;
-        return coef.overLong;
-      };
-
-      let nextOhmResult: OhmResult;
-      try {
-        const aiAnalysis = await analyzeTranscript(captainResult.transcript, {
+      const ohmAiPromise = captainOhmPromiseRef.current
+        ?? analyzeTranscript(captainResult.transcript, {
           model: runtimeConfig.ohmModel || runtimeConfig.router9Model,
           fallbackModel: runtimeConfig.ohmFallbackModel || runtimeConfig.router9FallbackModel,
           reactionDelayMs,
           useMemoryAssist: runtimeConfig.ohmAgentEnabled,
           returnDebug: true,
-          sessionId: activeRoundTokenRef.current.toString(),
-        });
+          sessionId: roundToken.toString(),
+        }).catch(() => null);
 
-        const lengthCoefficient = typeof aiAnalysis.lengthCoefficient === 'number' && aiAnalysis.lengthCoefficient > 0
-          ? aiAnalysis.lengthCoefficient
-          : 1;
-        const serverAppliedResponse = aiAnalysis.responseCoefficientApplied === true;
-        const responseCoefficient = serverAppliedResponse
-          ? (typeof aiAnalysis.responseCoefficient === 'number' && aiAnalysis.responseCoefficient > 0
-              ? aiAnalysis.responseCoefficient
-              : 1)
-          : localResponseCoefficient;
-        const adjustedTotalOhm = serverAppliedResponse
-          ? Number(aiAnalysis.totalOhm.toFixed(4))
-          : Number((aiAnalysis.totalOhm * responseCoefficient).toFixed(4));
-        const formula = responseCoefficient < 0.999
-          ? `${aiAnalysis.formula} x ${responseCoefficient.toFixed(2)}`
-          : aiAnalysis.formula;
-        const voltage = adjustedTotalOhm;
-        nextOhmResult = {
-          totalOhm: adjustedTotalOhm,
-          formula,
-          current: lengthCoefficient,
-          voltage,
-          score: toOhmScore(voltage),
-          difficulty: getDifficultyLabel(voltage),
-          chunkCount: aiAnalysis.chunks.length,
-          baseOhm: typeof aiAnalysis.baseOhm === 'number' ? aiAnalysis.baseOhm : undefined,
-          estimatedTC: typeof aiAnalysis.estimatedTC === 'number' ? aiAnalysis.estimatedTC : typeof aiAnalysis.baseOhm === 'number' ? aiAnalysis.baseOhm : undefined,
-          confirmedTC: typeof aiAnalysis.confirmedTC === 'number' ? aiAnalysis.confirmedTC : undefined,
-          candidateTC: typeof aiAnalysis.candidateTC === 'number' ? aiAnalysis.candidateTC : undefined,
-          linguisticComplexity: lengthCoefficient,
-          tensionLoad: typeof aiAnalysis.topicLevel === 'number' ? aiAnalysis.topicLevel : undefined,
-          responseCoefficient,
-          repeatCoefficient: 1,
-          chunks: aiAnalysis.chunks
-            .map((chunk) => ({
-              ...chunk,
-              label: String(chunk.label || '').toUpperCase(),
-            }))
-            .filter((chunk) => ['GREEN', 'BLUE', 'RED', 'PINK'].includes(chunk.label))
-            .map((chunk) => ({
-              text: chunk.text,
-              label: chunk.label as 'GREEN' | 'BLUE' | 'RED' | 'PINK',
-              ohm: Number(chunk.ohm || 0),
-            })),
-        };
-      } catch (aiError) {
-        console.warn('Ohm AI analysis failed, falling back to local rule-based calculation', aiError);
-        const semanticChunks = detectSemanticChunksFromCaptain(
-          captainResult.transcript,
-          runtimeConfig.semanticRuleOverrides,
-        );
-        const fallbackLengthCoefficient = resolveLengthCoefficient(captainResult.transcript);
-        const rawOhm = calculateSemanticOhm(semanticChunks, fallbackLengthCoefficient);
-        const responseCoefficient = localResponseCoefficient;
-        const adjustedTotalOhm = Number((rawOhm.totalOhm * responseCoefficient).toFixed(4));
-        const adjustedFormula = responseCoefficient < 0.999
-          ? `${rawOhm.formula} x ${responseCoefficient.toFixed(2)}`
-          : rawOhm.formula;
-        const adjustedVoltage = adjustedTotalOhm;
-        nextOhmResult = {
-          ...rawOhm,
-          totalOhm: adjustedTotalOhm,
-          formula: adjustedFormula,
-          voltage: adjustedVoltage,
-          score: toOhmScore(adjustedVoltage),
-          difficulty: getDifficultyLabel(adjustedVoltage),
-          chunkCount: semanticChunks.length,
-          baseOhm: rawOhm.totalOhm / Math.max(fallbackLengthCoefficient, 0.0001),
-          estimatedTC: rawOhm.totalOhm / Math.max(fallbackLengthCoefficient, 0.0001),
-          linguisticComplexity: fallbackLengthCoefficient,
-          tensionLoad: 1,
-          responseCoefficient,
-          repeatCoefficient: 1,
-          chunks: semanticChunks.map((chunk) => ({
-            text: chunk.text,
-            label: chunk.label,
-            ohm: chunk.ohm || 0,
-          })),
-        };
-      }
-
-      setOhmResult(nextOhmResult);
+      const [aiAnalysis, result] = await Promise.all([
+        ohmAiPromise,
+        evaluateCaptionCrewMeaning({
+          captainTranscript: captainResult.transcript,
+          crewTranscript: crewResult.transcript,
+          strictness: settings.strictness,
+        }),
+      ]);
       performance.mark('stopCrew:ohm-done');
-      performance.measure('ohm-analysis', 'stopCrew:transcripts-done', 'stopCrew:ohm-done');
-
-      setState('evaluating');
-
-      const result = await evaluateCaptionCrewMeaning({
-        captainTranscript: captainResult.transcript,
-        crewTranscript: crewResult.transcript,
-        strictness: settings.strictness,
-      });
       performance.mark('stopCrew:meaning-done');
-      performance.measure('meaning-eval', 'stopCrew:ohm-done', 'stopCrew:meaning-done');
-      performance.measure('total-after-transcripts', 'stopCrew:transcripts-done', 'stopCrew:meaning-done');
+      performance.measure('ohm+meaning-parallel', 'stopCrew:transcripts-done', 'stopCrew:meaning-done');
+
+      if (activeRoundTokenRef.current !== roundToken) return;
+
+      const nextOhmResult = aiAnalysis
+        ? buildOhmResultFromAiAnalysis(aiAnalysis, localResponseCoefficient)
+        : localOhmResult;
+      if (aiAnalysis) setOhmResult(nextOhmResult);
 
       const nextMetrics = buildRoundMetrics({
         ohmResult: nextOhmResult,
@@ -625,7 +619,7 @@ export function useCaptionCrewRound() {
 
       setMetrics(nextMetrics);
       setEvaluation(result);
-      setState('results');
+      // setState('results') already called above
 
       const roundId = createRoundId();
       void (async () => {
