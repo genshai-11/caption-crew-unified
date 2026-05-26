@@ -154,10 +154,19 @@ function mapCvrMeasureResponseToOhmPayload(result = {}, { elapsedMs = 0 } = {}) 
     ...candidateChunks.map(({ chunk, raw }) => buildChunkDiagnostic(chunk, 'candidate-resource', raw)),
   ];
 
-  const baseOhm = toFiniteNumber(tcBreakdown.estimatedTC, toFiniteNumber(tcBreakdown.confirmedTC, 0));
+  const hasTranscript = transcriptRaw.length > 0 || transcriptNormalized.length > 0;
+  const estimatedTC = toFiniteNumber(tcBreakdown.estimatedTC, 0);
+  const confirmedTC = toFiniteNumber(tcBreakdown.confirmedTC, 0);
+  const baseOhm = estimatedTC > 0
+    ? estimatedTC
+    : confirmedTC > 0
+      ? confirmedTC
+      : (hasTranscript ? 1 : 0);
   const lengthCoefficient = toFiniteNumber(lcBreakdown.lcValue, 1);
   const tlValue = toFiniteNumber(tlBreakdown.tlValue, 1);
-  const predictedCVR = toFiniteNumber(data?.predictedCVR, Number((baseOhm * lengthCoefficient * tlValue).toFixed(4)));
+  const recalculatedPredictedCVR = Number((baseOhm * lengthCoefficient * tlValue).toFixed(4));
+  const apiPredictedCVR = toFiniteNumber(data?.predictedCVR, 0);
+  const predictedCVR = apiPredictedCVR > 0 ? apiPredictedCVR : recalculatedPredictedCVR;
   const uncertainChunkCount = candidateChunks.filter(({ chunk }) => toFiniteNumber(chunk.confidence, 0) < 0.78).length;
 
   return {
