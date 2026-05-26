@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { RefreshCw, Users, X } from 'lucide-react';
 import { RolePanel } from '@/components/RolePanel';
-import { useCaptionCrewRound } from '@/hooks/useCaptionCrewRound';
-import { SummaryLocationState } from '@/types';
+import { useRoundContext } from '@/context/RoundContext';
 
 function formatCountdown(ms: number | null) {
   if (ms == null) return '';
@@ -22,7 +21,7 @@ function getOverlayCopy(state: string) {
 
 export default function GamePage() {
   const navigate = useNavigate();
-  const round = useCaptionCrewRound();
+  const round = useRoundContext();
   const overlay = getOverlayCopy(round.state);
   const [captainInput, setCaptainInput] = useState('');
   const [crewInput, setCrewInput] = useState('');
@@ -35,54 +34,9 @@ export default function GamePage() {
 
   useEffect(() => {
     if (round.state === 'results' || round.state === 'crew-timeout') {
-      if (round.evaluation || round.feedbackError) {
-        const summaryState: SummaryLocationState = {
-          evaluation: round.evaluation,
-          reactionDelayMs: round.reactionDelayMs,
-          errorMessage: round.feedbackError,
-          captainPlayerId: round.captainPlayerId,
-          crewPlayerId: round.crewPlayerId,
-          captainName: round.captainName,
-          crewName: round.crewName,
-          captainTranscript: round.captainTranscript,
-          crewTranscript: round.crewTranscript,
-          captainVerifiedTranscript: round.captainVerifiedTranscript,
-          crewVerifiedTranscript: round.crewVerifiedTranscript,
-          ohmResult: round.ohmResult,
-          metrics: round.metrics,
-          captainAudioBlob: round.captainAudioBlob,
-          crewAudioBlob: round.crewAudioBlob,
-          captainAudioUrl: round.captainAudioUrl,
-          crewAudioUrl: round.crewAudioUrl,
-        };
-
-        navigate('/summary', {
-          replace: true,
-          state: summaryState,
-        });
-      }
+      navigate('/summary', { replace: true });
     }
-  }, [
-    navigate,
-    round.captainAudioBlob,
-    round.captainAudioUrl,
-    round.captainName,
-    round.captainPlayerId,
-    round.captainTranscript,
-    round.captainVerifiedTranscript,
-    round.crewAudioBlob,
-    round.crewAudioUrl,
-    round.crewName,
-    round.crewPlayerId,
-    round.crewTranscript,
-    round.crewVerifiedTranscript,
-    round.ohmResult,
-    round.metrics,
-    round.evaluation,
-    round.feedbackError,
-    round.reactionDelayMs,
-    round.state,
-  ]);
+  }, [navigate, round.state]);
 
   const canEditLearners = round.state === 'captain-ready';
   const canEndRound = round.rolesConfigured && round.state !== 'captain-ready';
