@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { ResultCard } from '@/components/ResultCard';
 import { useRoundContext } from '@/context/RoundContext';
 import { OhmChunkResult, RoundMetrics, TranscriptResult } from '@/types';
@@ -234,7 +234,7 @@ export default function AnalysisSummaryPage() {
   }, [round.crewAudioBlob, round.crewAudioUrl]);
 
   if (!hasContent) {
-    return null;
+    return <Navigate to="/" replace />;
   }
 
   return (
