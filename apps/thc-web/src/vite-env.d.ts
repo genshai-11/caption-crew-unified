@@ -13,6 +13,8 @@ interface ImportMetaEnv {
   readonly VITE_TEST_ROUTER_URL?: string;
   readonly VITE_EVALUATE_MEANING_URL?: string;
   readonly VITE_ADMIN_EMAILS?: string;
+  readonly VITE_SUPABASE_URL?: string;
+  readonly VITE_SUPABASE_PUBLISHABLE_KEY?: string;
 }
 
 interface ImportMeta {

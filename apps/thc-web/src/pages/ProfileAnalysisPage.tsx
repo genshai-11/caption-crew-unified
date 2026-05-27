@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { loadRecentRounds } from '@/services/roundRepository';
+import { loadSupabaseLearnerStats, type SupabaseLearnerStat } from '@/services/supabaseHistoryRepository';
 import type { RoundRecord } from '@/types';
 
 type RoleFilter = 'all' | 'captain' | 'crew';
@@ -300,6 +301,73 @@ function CrewPanel({ rounds }: { rounds: RoleRound[] }) {
   );
 }
 
+function SupabaseStatsPanel({ stats, loading }: { stats: SupabaseLearnerStat[]; loading: boolean }) {
+  const totals = useMemo(() => {
+    const sessions = stats.reduce((sum, row) => sum + row.totalSessions, 0);
+    const practiceSeconds = stats.reduce((sum, row) => sum + row.totalPracticeSeconds, 0);
+    const avgScore = stats.length > 0 ? stats.reduce((sum, row) => sum + row.avgScore, 0) / stats.length : null;
+    const best = stats.reduce<SupabaseLearnerStat | null>((current, row) => !current || row.bestScore > current.bestScore ? row : current, null);
+    return { sessions, practiceSeconds, avgScore, best };
+  }, [stats]);
+
+  return (
+    <section className="profile-section-stack">
+      <div className="section-title-row">
+        <div>
+          <p className="page-kicker">Supabase history source</p>
+          <h2 className="section-title">Stored in <span className="metric-cci">practice_results</span></h2>
+        </div>
+        <span className="status-dot status-ready">{loading ? 'loading' : `${stats.length} active learner(s)`}</span>
+      </div>
+
+      <div className="profile-kpi-grid">
+        <KpiCard label="Active learners" value={String(stats.length)} note="Profiles with at least one Supabase practice result." tone="green" />
+        <KpiCard label="Practice rows" value={String(totals.sessions)} note="Rows from Supabase practice_results via learner stats RPC." tone="blue" />
+        <KpiCard label="Average score" value={formatPercent(totals.avgScore)} note="Average of learner average scores; useful for Crew static level." />
+        <KpiCard label="Best learner" value={totals.best ? formatPercent(totals.best.bestScore) : '—'} note={totals.best ? totals.best.displayName : 'No Supabase learner stats loaded.'} tone="red" />
+      </div>
+
+      <section className="soft-card admin-section-minimal">
+        <div className="section-title-row">
+          <h3 className="section-title">Recent Supabase learners</h3>
+          <span className="soft-label">practice_results + profiles</span>
+        </div>
+        {stats.length === 0 ? (
+          <p className="muted-copy">No Supabase stats loaded yet. Check Supabase env config or RLS/RPC access.</p>
+        ) : (
+          <div className="profile-table-wrap">
+            <table className="profile-table">
+              <thead>
+                <tr>
+                  <th>Learner</th>
+                  <th>Sessions</th>
+                  <th>Avg</th>
+                  <th>Best</th>
+                  <th>Practice</th>
+                  <th>Last</th>
+                </tr>
+              </thead>
+              <tbody>
+                {stats.slice(0, 10).map((row) => (
+                  <tr key={row.userId}>
+                    <td>{row.displayName}</td>
+                    <td>{row.totalSessions}</td>
+                    <td>{formatPercent(row.avgScore)}</td>
+                    <td>{formatPercent(row.bestScore)}</td>
+                    <td>{formatMetric(row.totalPracticeSeconds / 60, 1, 'm')}</td>
+                    <td>{row.lastSessionAt ? new Date(row.lastSessionAt).toLocaleDateString() : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p className="admin-message">Note: Supabase CVR prompt history is in cvr_history, but most rows are not linked to learner IDs. Role-level Captain/Crew analysis still uses Firebase round records until the two histories are bridged.</p>
+      </section>
+    </section>
+  );
+}
+
 function RoundInsightTable({ roleRounds }: { roleRounds: RoleRound[] }) {
   const rows = [...roleRounds]
     .sort((a, b) => new Date(b.round.createdAt).getTime() - new Date(a.round.createdAt).getTime())
@@ -347,7 +415,9 @@ function RoundInsightTable({ roleRounds }: { roleRounds: RoleRound[] }) {
 
 export default function ProfileAnalysisPage() {
   const [rounds, setRounds] = useState<RoundRecord[]>([]);
+  const [supabaseStats, setSupabaseStats] = useState<SupabaseLearnerStat[]>([]);
   const [loading, setLoading] = useState(true);
+  const [supabaseLoading, setSupabaseLoading] = useState(true);
   const [learnerKey, setLearnerKey] = useState('all');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
 
@@ -363,6 +433,16 @@ export default function ProfileAnalysisPage() {
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
+      });
+    loadSupabaseLearnerStats()
+      .then((loadedStats) => {
+        if (!cancelled) setSupabaseStats(loadedStats);
+      })
+      .catch(() => {
+        if (!cancelled) setSupabaseStats([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSupabaseLoading(false);
       });
     return () => {
       cancelled = true;
@@ -410,6 +490,7 @@ export default function ProfileAnalysisPage() {
         </p>
       </section>
 
+      <SupabaseStatsPanel stats={supabaseStats} loading={supabaseLoading} />
       {(roleFilter === 'all' || roleFilter === 'captain') && <CaptainPanel rounds={captainRounds} />}
       {(roleFilter === 'all' || roleFilter === 'crew') && <CrewPanel rounds={crewRounds} />}
       <RoundInsightTable roleRounds={roleRounds} />
