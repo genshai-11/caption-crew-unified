@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { ResultCard } from '@/components/ResultCard';
 import { useRoundContext } from '@/context/RoundContext';
+import { resolveCrewResponseCoefficient } from '@/hooks/useCaptionCrewRound';
 import { OhmChunkResult, RoundMetrics, TranscriptResult } from '@/types';
 
 function formatConfidence(confidence?: number) {
@@ -16,14 +17,7 @@ function formatDuration(duration?: number) {
 
 function formatReactionDelay(delayMs: number | null) {
   if (typeof delayMs !== 'number' || Number.isNaN(delayMs) || delayMs < 0) return '—';
-  return `${Math.round(delayMs)} ms (${(delayMs / 1000).toFixed(2)}s)`;
-}
-
-function formatSource(transcript?: TranscriptResult | null) {
-  if (!transcript?.source) return '—';
-  if (transcript.source === 'streaming') return 'live streaming';
-  if (transcript.source === 'streaming-fallback-batch') return 'batch fallback';
-  return transcript.source;
+  return `${(delayMs / 1000).toFixed(2)}s`;
 }
 
 function getTranscriptPlaceholder(transcript?: TranscriptResult | null) {
@@ -33,16 +27,18 @@ function getTranscriptPlaceholder(transcript?: TranscriptResult | null) {
 }
 
 
-function resolveCrewResponseCoefficient(delayMs: number | null) {
-  if (typeof delayMs !== 'number' || Number.isNaN(delayMs) || delayMs <= 2000) return 1;
-  if (delayMs >= 5000) return 1 / 3;
-  const ratio = (delayMs - 2000) / 3000;
-  return 1 - ratio * (2 / 3);
-}
-
 function formatMetricNumber(value: number, digits = 2) {
   if (!Number.isFinite(value)) return '—';
   return Number(value.toFixed(digits)).toString();
+}
+
+function MetricLoadingValue({ className = '', text = 'đang tính…' }: { className?: string; text?: string }) {
+  return (
+    <span className={`metric-value metric-loading-value ${className}`}>
+      <span className="metric-mini-spinner" aria-hidden="true" />
+      <span>{text}</span>
+    </span>
+  );
 }
 
 function SummaryOhmCard({
@@ -59,6 +55,9 @@ function SummaryOhmCard({
   metrics?: RoundMetrics | null;
 }) {
   const [mseCoefficient, setMseCoefficient] = useState(metrics?.cci.mse.coefficient ?? 1);
+  const hasCvrMetric = typeof metrics?.cvr.rawUnits === 'number';
+  const hasCciMetric = typeof metrics?.cci.llmMeaningPercent === 'number';
+  const hasCpdMetric = Boolean(metrics?.cpd);
   const cvr = metrics?.cvr.rawUnits ?? totalOhm;
   const estimatedTC = metrics?.cvr.estimatedTC ?? chunks.reduce((sum, chunk) => sum + Number(chunk.ohm || 0), 0);
   const lc = metrics?.cvr.linguisticComplexity ?? metrics?.cvr.lengthCoefficient ?? current;
@@ -82,38 +81,58 @@ function SummaryOhmCard({
 
       <div className="metric-formula-hero metric-cvr">
         <span className="metric-label metric-title metric-cvr">CVR ({metrics?.cvr.unit || 'Ω'})</span>
-        <span className="metric-value metric-formula-value">{formatMetricNumber(cvr)} {metrics?.cvr.unit || 'Ω'}</span>
+        {hasCvrMetric ? (
+          <span className="metric-value metric-formula-value">{formatMetricNumber(cvr)} {metrics?.cvr.unit || 'Ω'}</span>
+        ) : (
+          <MetricLoadingValue className="metric-cvr metric-formula-value" text="đang tính CVR…" />
+        )}
         <span className="metric-formula-detail">
-          detail: {formatMetricNumber(estimatedTC)} (TC) × {formatMetricNumber(lc)} (LC) × {formatMetricNumber(tl)} (TL) × {formatMetricNumber(responseCoefficient)} (RT) × {formatMetricNumber(repeatCoefficient)} (RC) = {formatMetricNumber(cvr)} Ω
+          {hasCvrMetric
+            ? `detail: ${formatMetricNumber(estimatedTC)} (TC) × ${formatMetricNumber(lc)} (LC) × ${formatMetricNumber(tl)} (TL) × ${formatMetricNumber(responseCoefficient)} (RT) × ${formatMetricNumber(repeatCoefficient)} (RC) = ${formatMetricNumber(cvr)} Ω`
+            : 'đang chờ CVR measure trả kết quả…'}
         </span>
       </div>
 
       <div className="analysis-metrics summary-inline-metrics">
-        <div>
-          <span className="metric-label metric-cci">Meaning %</span>
-          <span className="metric-value metric-cci">{formatMetricNumber(meaningPercent)}%</span>
+        <div className="metric-primary-cci">
+          <span className="metric-label metric-title metric-cci">CCI ({metrics?.cci.unit || 'A'}) = MSE × % Semantics</span>
+          {hasCciMetric ? (
+            <span className="metric-value metric-cci metric-cci-formula">
+              {formatMetricNumber(Number(mseCoefficient || 0), 2)} × {formatMetricNumber(meaningDecimal, 4)} = {formatMetricNumber(cciCurrent, 4)}{metrics?.cci.unit || 'A'}
+            </span>
+          ) : (
+            <MetricLoadingValue className="metric-cci" text="đang tính CCI…" />
+          )}
+          <div className="metric-cci-meta-row">
+            <div className="metric-secondary-cci">
+              <span className="metric-label metric-cci">Semantics</span>
+              {hasCciMetric ? (
+                <span className="metric-value metric-cci">{formatMetricNumber(meaningPercent)}%</span>
+              ) : (
+                <MetricLoadingValue className="metric-cci" text="đang tính Semantics…" />
+              )}
+            </div>
+            <label className="field-stack metric-mse-input metric-mse-inline">
+              <span>MSE</span>
+              <input
+                type="number"
+                min="0"
+                step="0.05"
+                value={mseCoefficient}
+                onChange={(event) => setMseCoefficient(Number(event.target.value))}
+              />
+            </label>
+          </div>
         </div>
-        <label className="field-stack metric-mse-input">
-          <span>MSE coefficient</span>
-          <input
-            type="number"
-            min="0"
-            step="0.05"
-            value={mseCoefficient}
-            onChange={(event) => setMseCoefficient(Number(event.target.value))}
-          />
-        </label>
-        <div>
-          <span className="metric-label metric-title metric-cci">CCI ({metrics?.cci.unit || 'A'})</span>
-          <span className="metric-value metric-cci">
-            {formatMetricNumber(meaningDecimal, 4)} × {formatMetricNumber(Number(mseCoefficient || 0), 2)} MSE = {formatMetricNumber(cciCurrent, 4)} {metrics?.cci.unit || 'A'}
-          </span>
-        </div>
-        <div>
+        <div className="metric-primary-cpd">
           <span className="metric-label metric-title metric-cpd">CPD ({metrics?.cpd.unit || 'V'})</span>
-          <span className="metric-value metric-cpd">
-            {formatMetricNumber(cciCurrent, 4)} × {formatMetricNumber(cvr)} Ω = {formatMetricNumber(cpd)} {metrics?.cpd.unit || 'V'}
-          </span>
+          {hasCvrMetric && hasCciMetric && hasCpdMetric ? (
+            <span className="metric-value metric-cpd">
+              {formatMetricNumber(cciCurrent, 4)}{metrics?.cci.unit || 'A'} × {formatMetricNumber(cvr)}Ω = {formatMetricNumber(cpd)}{metrics?.cpd.unit || 'V'}
+            </span>
+          ) : (
+            <MetricLoadingValue className="metric-cpd" text="đang tính CPD…" />
+          )}
         </div>
         <div>
           <span className="metric-label">reaction delay</span>
@@ -169,10 +188,6 @@ function SummaryVoiceCard({
           <div>
             <span className="metric-label">duration</span>
             <span className="metric-value">{formatDuration(transcript?.duration)}</span>
-          </div>
-          <div>
-            <span className="metric-label">source</span>
-            <span className="metric-value">{formatSource(transcript)}</span>
           </div>
         </div>
       </div>
@@ -253,7 +268,14 @@ export default function AnalysisSummaryPage() {
         <section className="soft-card admin-section-minimal">
           <p className="game-error summary-error">{round.feedbackError}</p>
           <div className="action-row">
-            <button type="button" className="primary-pill-button" onClick={() => navigate('/', { replace: true })}>
+            <button
+              type="button"
+              className="primary-pill-button"
+              onClick={() => {
+                round.resetRound();
+                navigate('/', { replace: true });
+              }}
+            >
               Back to game
             </button>
           </div>
@@ -291,9 +313,12 @@ export default function AnalysisSummaryPage() {
         <ResultCard
           evaluation={round.evaluation}
           reactionDelayMs={round.reactionDelayMs}
-          onReset={() => navigate('/', { replace: true })}
+          onReset={() => {
+            round.resetRound();
+            navigate('/', { replace: true });
+          }}
         />
-      ) : (
+      ) : !round.feedbackError && (
         <section className="soft-card admin-section-minimal analysis-loading-card">
           <div className="spiral-loader" aria-hidden="true">
             <span className="spiral-ring spiral-ring-blue" />

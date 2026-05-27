@@ -112,11 +112,12 @@ export function loadCachedRounds(): RoundRecord[] {
   return loadLocalHistory();
 }
 
-export async function loadRecentRounds(): Promise<RoundRecord[]> {
+export async function loadRecentRounds(maxRounds = 20): Promise<RoundRecord[]> {
   const cached = loadLocalHistory();
+  const cappedLimit = Math.max(1, Math.min(200, Math.round(maxRounds)));
   if (db) {
     try {
-      const q = query(collection(db, 'rounds'), orderBy('createdAt', 'desc'), limit(20));
+      const q = query(collection(db, 'rounds'), orderBy('createdAt', 'desc'), limit(cappedLimit));
       const snap = await getDocs(q);
       if (!snap.empty) {
         const rounds = snap.docs.map((d) => normalizeRound(d.data() as RoundRecord));

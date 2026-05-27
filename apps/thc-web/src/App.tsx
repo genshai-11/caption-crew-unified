@@ -8,6 +8,7 @@ import AdminLoginPage from '@/pages/AdminLoginPage';
 import AnalysisSummaryPage from '@/pages/AnalysisSummaryPage';
 import GamePage from '@/pages/GamePage';
 import HistoryPage from '@/pages/HistoryPage';
+import ProfileAnalysisPage from '@/pages/ProfileAnalysisPage';
 import SettingsPage from '@/pages/SettingsPage';
 import { defaultAdminRuntimeConfig, loadCachedVisualTheme, loadPublicVisualTheme } from '@/services/adminConfigRepository';
 import type { VisualTheme } from '@/types';
@@ -53,6 +54,14 @@ function AppShell() {
             element={(
               <RequireAdmin>
                 <AdminPage />
+              </RequireAdmin>
+            )}
+          />
+          <Route
+            path="/admin/dashboard"
+            element={(
+              <RequireAdmin>
+                <ProfileAnalysisPage />
               </RequireAdmin>
             )}
           />

@@ -343,6 +343,9 @@ export default function AdminPage() {
         </div>
         <div className="action-row">
           <StatusBadge label={systemReady ? 'ready' : 'not ready'} status={systemReady ? 'ready' : 'not-ready'} />
+          <button className="ghost-pill-button" onClick={() => navigate('/admin/dashboard')}>
+            Dashboard
+          </button>
           <button className="ghost-pill-button" onClick={async () => { await signOutAdmin(); navigate('/admin-login', { replace: true }); }}>
             Sign out
           </button>

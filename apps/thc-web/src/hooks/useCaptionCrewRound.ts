@@ -23,7 +23,7 @@ function toOhmScore(voltage: number) {
   return Math.max(0, Math.min(100, Math.round((voltage / 120) * 100)));
 }
 
-function resolveCrewResponseCoefficient(
+export function resolveCrewResponseCoefficient(
   delayMs: number | null,
   timingConfig?: { fullScoreMs?: number; minScoreMs?: number; minCoefficient?: number },
 ) {
