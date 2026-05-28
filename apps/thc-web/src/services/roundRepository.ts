@@ -119,7 +119,10 @@ export async function saveRound(round: RoundRecord) {
   saveLocalHistory(local);
 
   if (db) {
-    await setDoc(doc(db, 'rounds', normalized.id), stripUndefinedDeep(normalized), { merge: true });
+    void setDoc(doc(db, 'rounds', normalized.id), stripUndefinedDeep(normalized), { merge: true })
+      .catch((error) => {
+        console.warn('Background round sync failed', error);
+      });
   }
 }
 

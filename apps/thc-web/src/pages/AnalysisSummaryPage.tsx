@@ -86,7 +86,7 @@ function SummaryOhmCard({
     setSaveMessage(null);
     try {
       await onSaveMse(Math.max(0, Number(mseCoefficient || 0)));
-      setSaveMessage('Saved to round metrics.');
+      setSaveMessage('Saved to round metrics. Cloud sync continues in background.');
     } catch (error: any) {
       setSaveMessage(error?.message || 'Could not save MSE.');
     } finally {
