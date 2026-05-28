@@ -205,7 +205,7 @@ function BarChart({ data, primarySeries }: {
               <rect x={cx - barW / 2} y={H - PAD.bottom - passH} width={barW} height={passH} rx={6} className="profile-bar-green" style={{ opacity: 0.85 }} />
             )}
             <text x={cx} y={H - PAD.bottom + 18} textAnchor="middle" fontSize="12" fontWeight="500" className="profile-chart-label">{d.x}</text>
-            <text x={cx} y={Math.max(PAD.top, y - 6)} textAnchor="middle" fontSize="13" fontWeight="600" className="profile-chart-value">{primaryVal}</text>
+            <text x={cx} y={Math.max(PAD.top, y - 6)} textAnchor="middle" fontSize="13" fontWeight="600" className="profile-chart-value">{fmt(primaryVal, 1)}</text>
           </g>
         );
       })}

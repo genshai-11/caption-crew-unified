@@ -86,10 +86,11 @@ function buildRoleRounds(rounds: RoundRecord[], learnerKey: string, roleFilter: 
   return output;
 }
 
-function buildLearners(rounds: RoundRecord[]): LearnerOption[] {
+function buildLearners(rounds: RoundRecord[], roleFilter: RoleFilter): LearnerOption[] {
   const learners = new Map<string, LearnerOption>();
+  const roles = roleFilter === 'captain' ? ['captain'] as const : roleFilter === 'crew' ? ['crew'] as const : ['captain', 'crew'] as const;
   for (const round of rounds) {
-    (['captain', 'crew'] as const).forEach((role) => {
+    roles.forEach((role) => {
       const key = participantKey(round, role);
       if (!learners.has(key)) {
         learners.set(key, {
@@ -100,7 +101,8 @@ function buildLearners(rounds: RoundRecord[]): LearnerOption[] {
       }
     });
   }
-  return [{ key: 'all', label: 'All learners', roleHint: 'Same source as History / Firebase rounds' }, ...Array.from(learners.values())];
+  const allLabel = roleFilter === 'captain' ? 'All captains' : roleFilter === 'crew' ? 'All crews' : 'All learners';
+  return [{ key: 'all', label: allLabel, roleHint: 'Same source as History / Firebase rounds' }, ...Array.from(learners.values())];
 }
 
 function getStabilityIndex(roleRounds: RoleRound[]) {
@@ -388,11 +390,17 @@ export default function ProfileAnalysisPage() {
     };
   }, []);
 
-  const learners = useMemo(() => buildLearners(rounds), [rounds]);
+  const learners = useMemo(() => buildLearners(rounds, roleFilter), [rounds, roleFilter]);
   const roleRounds = useMemo(() => buildRoleRounds(rounds, learnerKey, roleFilter), [rounds, learnerKey, roleFilter]);
   const captainRounds = useMemo(() => buildRoleRounds(rounds, learnerKey, 'captain'), [rounds, learnerKey]);
   const crewRounds = useMemo(() => buildRoleRounds(rounds, learnerKey, 'crew'), [rounds, learnerKey]);
   const selectedLearner = learners.find((learner) => learner.key === learnerKey) || learners[0];
+
+  useEffect(() => {
+    if (!learners.some((learner) => learner.key === learnerKey)) {
+      setLearnerKey('all');
+    }
+  }, [learners, learnerKey]);
 
   return (
     <main className="screen-shell admin-shell profile-analysis-shell">

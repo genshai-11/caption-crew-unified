@@ -31,6 +31,12 @@ function formatAverage(value: number | null, suffix = '') {
   return `${value}${suffix}`;
 }
 
+function formatMetricValue(value?: number | null, digits = 1, suffix = '') {
+  const numeric = Number(value ?? NaN);
+  if (!Number.isFinite(numeric)) return '—';
+  return `${numeric.toFixed(digits)}${suffix}`;
+}
+
 function learnerKey(id?: string | null, name?: string | null, fallback?: string) {
   const cleanId = String(id || '').trim();
   if (cleanId) return cleanId;
@@ -219,15 +225,15 @@ function HistoryCard({ round }: { round: RoundRecord }) {
       <div className="history-metric-row history-metric-row-compact">
         <div>
           <span className="metric-label metric-cci">CCI ({round.metrics?.cci.unit || 'A'})</span>
-          <span className="metric-value metric-cci">{round.metrics?.cci.score != null ? `${round.metrics.cci.score} ${round.metrics.cci.unit}` : formatScorePercent(round.evaluation?.matchScore)}</span>
+          <span className="metric-value metric-cci">{round.metrics?.cci.score != null ? formatMetricValue(round.metrics.cci.score, 1, ` ${round.metrics.cci.unit}`) : formatScorePercent(round.evaluation?.matchScore)}</span>
         </div>
         <div>
           <span className="metric-label metric-cvr">CVR ({round.metrics?.cvr.unit || 'Ω'})</span>
-          <span className="metric-value metric-cvr">{round.metrics?.cvr.rawUnits != null ? `${round.metrics.cvr.rawUnits} ${round.metrics.cvr.unit}` : '—'}</span>
+          <span className="metric-value metric-cvr">{round.metrics?.cvr.rawUnits != null ? formatMetricValue(round.metrics.cvr.rawUnits, 1, ` ${round.metrics.cvr.unit}`) : '—'}</span>
         </div>
         <div>
           <span className="metric-label metric-cpd">CPD ({round.metrics?.cpd.unit || 'V'})</span>
-          <span className="metric-value metric-cpd">{round.metrics?.cpd.raw != null ? `${round.metrics.cpd.raw} ${round.metrics.cpd.unit}` : round.metrics?.cpd.score != null ? `${round.metrics.cpd.score} ${round.metrics.cpd.unit}` : '—'}</span>
+          <span className="metric-value metric-cpd">{round.metrics?.cpd.raw != null ? formatMetricValue(round.metrics.cpd.raw, 1, ` ${round.metrics.cpd.unit}`) : round.metrics?.cpd.score != null ? formatMetricValue(round.metrics.cpd.score, 1, ` ${round.metrics.cpd.unit}`) : '—'}</span>
         </div>
         <div>
           <span className="metric-label">delay</span>
@@ -254,7 +260,7 @@ function HistoryCard({ round }: { round: RoundRecord }) {
             <span className="metric-label">CCI meaning analysis</span>
             <p className="analysis-reason">{round.evaluation?.reason || 'No evaluation summary available.'}</p>
             {round.metrics?.cci && (
-              <p className="admin-message">Saved formula: {round.metrics.cci.card?.label || '1-on-1'} ({round.metrics.cci.card?.baseA || 10}A) × MSE {round.metrics.cci.mse.coefficient} × Semantics {(round.metrics.cci.llmMeaningPercent / 100).toFixed(4)} = {round.metrics.cci.current}A.</p>
+              <p className="admin-message">Saved formula: {round.metrics.cci.card?.label || '1-on-1'} ({formatMetricValue(round.metrics.cci.card?.baseA, 1)}A) × MSE {formatMetricValue(round.metrics.cci.mse.coefficient, 1)} × Semantics {formatMetricValue((round.metrics.cci.llmMeaningPercent || 0) / 100, 1)} = {formatMetricValue(round.metrics.cci.current, 1)}A.</p>
             )}
           </div>
 
