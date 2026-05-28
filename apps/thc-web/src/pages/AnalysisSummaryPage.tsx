@@ -47,14 +47,18 @@ function SummaryOhmCard({
   chunks,
   reactionDelayMs,
   metrics,
+  onSaveMse,
 }: {
   totalOhm: number;
   current: number;
   chunks: OhmChunkResult[];
   reactionDelayMs: number | null;
   metrics?: RoundMetrics | null;
+  onSaveMse?: (mseCoefficient: number) => Promise<void>;
 }) {
   const [mseCoefficient, setMseCoefficient] = useState(metrics?.cci.mse.coefficient ?? 1);
+  const [savingMse, setSavingMse] = useState(false);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const hasCvrMetric = typeof metrics?.cvr.rawUnits === 'number';
   const hasCciMetric = typeof metrics?.cci.llmMeaningPercent === 'number';
   const hasCpdMetric = Boolean(metrics?.cpd);
@@ -67,8 +71,28 @@ function SummaryOhmCard({
   const tl = metrics?.cvr.tensionLoad ?? (cvr > 0 && estimatedTC > 0 ? cvr / denominator : 1);
   const meaningPercent = metrics?.cci.llmMeaningPercent ?? 0;
   const meaningDecimal = meaningPercent / 100;
-  const cciCurrent = meaningDecimal * Math.max(0, Number(mseCoefficient || 0));
+  const cardBaseA = metrics?.cci.card?.baseA ?? 10;
+  const cardLabel = metrics?.cci.card?.label || '1-on-1';
+  const cciCurrent = cardBaseA * meaningDecimal * Math.max(0, Number(mseCoefficient || 0));
   const cpd = cciCurrent * cvr;
+
+  useEffect(() => {
+    setMseCoefficient(metrics?.cci.mse.coefficient ?? 1);
+  }, [metrics?.cci.mse.coefficient, metrics?.cci.card?.id]);
+
+  const handleSaveMse = async () => {
+    if (!onSaveMse) return;
+    setSavingMse(true);
+    setSaveMessage(null);
+    try {
+      await onSaveMse(Math.max(0, Number(mseCoefficient || 0)));
+      setSaveMessage('Saved to round metrics.');
+    } catch (error: any) {
+      setSaveMessage(error?.message || 'Could not save MSE.');
+    } finally {
+      setSavingMse(false);
+    }
+  };
 
   return (
     <section className="soft-card admin-section-minimal metric-formula-card">
@@ -95,15 +119,19 @@ function SummaryOhmCard({
 
       <div className="analysis-metrics summary-inline-metrics">
         <div className="metric-primary-cci">
-          <span className="metric-label metric-title metric-cci">CCI ({metrics?.cci.unit || 'A'}) = MSE × % Semantics</span>
+          <span className="metric-label metric-title metric-cci">CCI ({metrics?.cci.unit || 'A'}) = CCI cards × MSE × Semantics</span>
           {hasCciMetric ? (
             <span className="metric-value metric-cci metric-cci-formula">
-              {formatMetricNumber(Number(mseCoefficient || 0), 2)} × {formatMetricNumber(meaningDecimal, 4)} = {formatMetricNumber(cciCurrent, 4)}{metrics?.cci.unit || 'A'}
+              {formatMetricNumber(cardBaseA, 2)} × {formatMetricNumber(Number(mseCoefficient || 0), 2)} × {formatMetricNumber(meaningDecimal, 4)} = {formatMetricNumber(cciCurrent, 4)}{metrics?.cci.unit || 'A'}
             </span>
           ) : (
             <MetricLoadingValue className="metric-cci" text="đang tính CCI…" />
           )}
-          <div className="metric-cci-meta-row">
+          <div className="metric-cci-meta-row metric-cci-meta-row-3up">
+            <div className="metric-secondary-cci">
+              <span className="metric-label metric-cci">CCI card</span>
+              <span className="metric-value metric-cci">{cardLabel} · {formatMetricNumber(cardBaseA)}A</span>
+            </div>
             <div className="metric-secondary-cci">
               <span className="metric-label metric-cci">Semantics</span>
               {hasCciMetric ? (
@@ -121,8 +149,12 @@ function SummaryOhmCard({
                 value={mseCoefficient}
                 onChange={(event) => setMseCoefficient(Number(event.target.value))}
               />
+              <button type="button" className="ghost-pill-button metric-mse-save" onClick={() => void handleSaveMse()} disabled={savingMse || !onSaveMse || !hasCciMetric || !hasCvrMetric}>
+                {savingMse ? 'Saving…' : 'Apply / Save'}
+              </button>
             </label>
           </div>
+          {saveMessage && <p className="admin-message metric-save-message">{saveMessage}</p>}
         </div>
         <div className="metric-primary-cpd">
           <span className="metric-label metric-title metric-cpd">CPD ({metrics?.cpd.unit || 'V'})</span>
@@ -306,6 +338,9 @@ export default function AnalysisSummaryPage() {
           chunks={round.ohmResult.chunks}
           reactionDelayMs={round.reactionDelayMs}
           metrics={round.metrics || null}
+          onSaveMse={async (mseCoefficient) => {
+            await round.saveSummaryMse(mseCoefficient);
+          }}
         />
       )}
 

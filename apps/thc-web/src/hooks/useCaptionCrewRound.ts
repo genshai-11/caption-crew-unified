@@ -6,7 +6,7 @@ import { createDeepgramStreamingSession, DeepgramStreamingSession } from '@/serv
 import { transcribeRoundAudio } from '@/services/transcriptionService';
 import { analyzeTranscript, type OhmAnalysisResult } from '@/services/aiService';
 import { calculateSemanticOhm, detectSemanticChunksFromCaptain, getDifficultyLabel } from '@/lib/ohmCalculator';
-import { buildRoundMetrics, GameSettings, MeaningEvaluation, OhmResult, RoundMetrics, RoundRecord, RoundState, TranscriptResult } from '@/types';
+import { buildRoundMetrics, CciCard, GameSettings, MeaningEvaluation, OhmResult, RoundMetrics, RoundRecord, RoundState, TranscriptResult } from '@/types';
 import { loadAdminRuntimeConfig } from '@/services/adminConfigRepository';
 import { useRoundRecorder } from './useRoundRecorder';
 
@@ -27,19 +27,32 @@ export function resolveCrewResponseCoefficient(
   delayMs: number | null,
   timingConfig?: { fullScoreMs?: number; minScoreMs?: number; minCoefficient?: number },
 ) {
-  const fullScoreMs = Number(timingConfig?.fullScoreMs || 2000);
-  const minScoreMs = Number(timingConfig?.minScoreMs || 5000);
-  const minCoefficient = Number(timingConfig?.minCoefficient || (1 / 3));
+  const fullScoreMs = Number(timingConfig?.fullScoreMs ?? 1000);
+  const minScoreMsRaw = Number(timingConfig?.minScoreMs ?? 3000);
+  const minScoreMs = Math.max(fullScoreMs + 1, minScoreMsRaw);
+  const minCoefficient = Math.max(0, Math.min(1, Number(timingConfig?.minCoefficient ?? 0)));
 
   if (typeof delayMs !== 'number' || Number.isNaN(delayMs) || delayMs <= fullScoreMs) return 1;
   if (delayMs >= minScoreMs) return minCoefficient;
 
   const span = Math.max(1, minScoreMs - fullScoreMs);
   const ratio = (delayMs - fullScoreMs) / span;
-  return 1 - ratio * (1 - minCoefficient);
+  return Math.max(minCoefficient, 1 - ratio * (1 - minCoefficient));
 }
 
 const ROLE_SETUP_KEY = 'cc-faceoff-role-setup-v1';
+const FALLBACK_CCI_CARD: CciCard = { id: '1-on-1', label: '1-on-1', baseA: 10, icon: 'hand', active: true, order: 0 };
+
+function getAvailableCciCards() {
+  const cards = loadAdminRuntimeConfig().cciCards
+    .filter((card) => card.active !== false && Number(card.baseA) > 0)
+    .sort((a, b) => a.order - b.order);
+  return cards.length > 0 ? cards : [FALLBACK_CCI_CARD];
+}
+
+function getCciCardById(cards: CciCard[], cardId?: string | null) {
+  return cards.find((card) => card.id === cardId) || cards[0] || FALLBACK_CCI_CARD;
+}
 
 function buildLocalOhmFallback(
   transcript: string,
@@ -154,6 +167,10 @@ export function useCaptionCrewRound() {
   const [crewName, setCrewName] = useState('');
   const [captainPlayerId, setCaptainPlayerId] = useState<string | null>(null);
   const [crewPlayerId, setCrewPlayerId] = useState<string | null>(null);
+  const [availableCciCards, setAvailableCciCards] = useState<CciCard[]>(() => getAvailableCciCards());
+  const [selectedCciCardId, setSelectedCciCardId] = useState(() => getAvailableCciCards()[0]?.id || FALLBACK_CCI_CARD.id);
+  const [lockedCciCard, setLockedCciCard] = useState<CciCard>(() => getAvailableCciCards()[0] || FALLBACK_CCI_CARD);
+  const [currentRoundId, setCurrentRoundId] = useState<string | null>(null);
 
   const captainAudioBlobRef = useRef<Blob | null>(null);
   const captainStoppedAtRef = useRef<number | null>(null);
@@ -165,6 +182,7 @@ export function useCaptionCrewRound() {
   const captainStreamingSessionRef = useRef<DeepgramStreamingSession | null>(null);
   const crewStreamingSessionRef = useRef<DeepgramStreamingSession | null>(null);
   const activeRoundTokenRef = useRef(0);
+  const currentRoundRecordRef = useRef<RoundRecord | null>(null);
 
   useEffect(() => {
     loadSettings().then(setSettings).catch(() => undefined);
@@ -317,7 +335,12 @@ export function useCaptionCrewRound() {
     }
   }, []);
 
-  const resetRound = useCallback(() => {
+  const resetRound = useCallback((options?: { preserveSelectedCciCard?: boolean }) => {
+    const cards = getAvailableCciCards();
+    const nextSelected = options?.preserveSelectedCciCard
+      ? getCciCardById(cards, selectedCciCardId)
+      : getCciCardById(cards, FALLBACK_CCI_CARD.id);
+
     activeRoundTokenRef.current += 1;
     captainStreamingSessionRef.current?.close();
     crewStreamingSessionRef.current?.close();
@@ -325,6 +348,11 @@ export function useCaptionCrewRound() {
     crewStreamingSessionRef.current = null;
     captainRecorder.reset();
     crewRecorder.reset();
+    setAvailableCciCards(cards);
+    setSelectedCciCardId(nextSelected.id);
+    setLockedCciCard(nextSelected);
+    setCurrentRoundId(null);
+    currentRoundRecordRef.current = null;
     setState('captain-ready');
     setCaptainTranscript(null);
     setCrewTranscript(null);
@@ -348,7 +376,7 @@ export function useCaptionCrewRound() {
     captainPrimaryTranscriptPromiseRef.current = null;
     captainOhmPromiseRef.current = null;
     clearCrewTimers();
-  }, [captainRecorder, clearCrewTimers, crewRecorder]);
+  }, [captainRecorder, clearCrewTimers, crewRecorder, selectedCciCardId]);
 
   const replaceLearners = useCallback((nextCaptainName: string, nextCrewName: string) => {
     const trimmedCaptain = nextCaptainName.trim().slice(0, 40);
@@ -370,7 +398,12 @@ export function useCaptionCrewRound() {
   }, [resetRound]);
 
   const startCaptain = useCallback(async () => {
-    resetRound();
+    const cards = getAvailableCciCards();
+    const selectedCard = getCciCardById(cards, selectedCciCardId);
+    resetRound({ preserveSelectedCciCard: true });
+    setAvailableCciCards(cards);
+    setSelectedCciCardId(selectedCard.id);
+    setLockedCciCard(selectedCard);
     setState('captain-recording');
 
     if (shouldUseDeepgramLivePartial()) {
@@ -387,7 +420,7 @@ export function useCaptionCrewRound() {
     setCaptainStreamingStatus('Live partial transcript disabled — using a single batch transcript after stop.');
     captainStreamingSessionRef.current = null;
     await captainRecorder.start();
-  }, [beginStreamingSession, captainRecorder, resetRound]);
+  }, [beginStreamingSession, captainRecorder, resetRound, selectedCciCardId]);
 
   const stopCaptain = useCallback(async () => {
     const blob = await captainRecorder.stop();
@@ -449,11 +482,6 @@ export function useCaptionCrewRound() {
       .catch(() => undefined);
 
     const waitingStartedAt = Date.now();
-    timeoutRef.current = window.setTimeout(() => {
-      setReactionDelayMs(Date.now() - (captainStoppedAtRef.current || Date.now()));
-      setEvaluation({ matchScore: 0, decision: 'timeout', reason: 'Crew started too late.', feedbackType: 'off' });
-      setState('crew-timeout');
-    }, settings.maxCrewStartDelayMs);
 
     countdownIntervalRef.current = window.setInterval(() => {
       const elapsed = Date.now() - waitingStartedAt;
@@ -465,13 +493,6 @@ export function useCaptionCrewRound() {
     if (state !== 'crew-waiting') return;
     const delay = Date.now() - (captainStoppedAtRef.current || Date.now());
     setReactionDelayMs(delay);
-    if (delay > settings.maxCrewStartDelayMs) {
-      clearCrewTimers();
-      setEvaluation({ matchScore: 0, decision: 'timeout', reason: 'Crew started too late.', feedbackType: 'off' });
-      setState('crew-timeout');
-      return;
-    }
-
     clearCrewTimers();
     setState('crew-recording');
 
@@ -489,7 +510,7 @@ export function useCaptionCrewRound() {
     setCrewStreamingStatus('Live partial transcript disabled — using a single batch transcript after stop.');
     crewStreamingSessionRef.current = null;
     await crewRecorder.start();
-  }, [beginStreamingSession, clearCrewTimers, crewRecorder, settings.maxCrewStartDelayMs, state]);
+  }, [beginStreamingSession, clearCrewTimers, crewRecorder, state]);
 
   const stopCrew = useCallback(async () => {
     performance.mark('stopCrew:start');
@@ -614,6 +635,7 @@ export function useCaptionCrewRound() {
         mseCoefficient: 1,
         mseSource: 'manual-default',
         mseMeasured: false,
+        cciCard: lockedCciCard,
         cvrSource: 'cvr-analysis',
       });
 
@@ -622,6 +644,23 @@ export function useCaptionCrewRound() {
       // setState('results') already called above
 
       const roundId = createRoundId();
+      setCurrentRoundId(roundId);
+      currentRoundRecordRef.current = {
+        id: roundId,
+        createdAt: new Date().toISOString(),
+        state: 'results',
+        captainPlayerId,
+        crewPlayerId,
+        captainName: captainName || null,
+        crewName: crewName || null,
+        captainTranscript: captainResult,
+        crewTranscript: crewResult,
+        ohmResult: nextOhmResult,
+        metrics: nextMetrics,
+        evaluation: result,
+        reactionDelayMs: reactionDelayMs || undefined,
+        timeoutLost: false,
+      };
       void (async () => {
         try {
           const [captainAudio, crewAudio, captainVerified, crewVerified] = await Promise.all([
@@ -645,9 +684,12 @@ export function useCaptionCrewRound() {
           }
 
           const round: RoundRecord = {
-            id: roundId,
-            createdAt: new Date().toISOString(),
-            state: 'results',
+            ...(currentRoundRecordRef.current || {
+              id: roundId,
+              createdAt: new Date().toISOString(),
+              state: 'results',
+              timeoutLost: false,
+            }),
             captainPlayerId,
             crewPlayerId,
             captainName: captainName || null,
@@ -657,7 +699,6 @@ export function useCaptionCrewRound() {
             captainVerifiedTranscript: captainVerified || undefined,
             crewVerifiedTranscript: crewVerified || undefined,
             ohmResult: nextOhmResult,
-            metrics: nextMetrics,
             evaluation: result,
             reactionDelayMs: reactionDelayMs || undefined,
             timeoutLost: false,
@@ -668,6 +709,7 @@ export function useCaptionCrewRound() {
             captainAudioMimeType: captainAudio?.mimeType,
             crewAudioMimeType: crewAudio?.mimeType,
           };
+          currentRoundRecordRef.current = round;
           await saveRound(round);
         } catch (backgroundError) {
           console.warn('Background save failed', backgroundError);
@@ -677,7 +719,42 @@ export function useCaptionCrewRound() {
       setFeedbackError(error.message || 'Analysis failed.');
       setState('results');
     }
-  }, [captainName, captainPlayerId, crewName, crewPlayerId, crewRecorder, reactionDelayMs, resolvePrimaryTranscript, settings.strictness, startCaptainTranscriptionPrefetch]);
+  }, [captainName, captainPlayerId, crewName, crewPlayerId, crewRecorder, lockedCciCard, reactionDelayMs, resolvePrimaryTranscript, settings.strictness, startCaptainTranscriptionPrefetch]);
+
+  const selectCciCard = useCallback((cardId: string) => {
+    if (state !== 'captain-ready') return;
+    const cards = getAvailableCciCards();
+    const selected = getCciCardById(cards, cardId);
+    setAvailableCciCards(cards);
+    setSelectedCciCardId(selected.id);
+    setLockedCciCard(selected);
+  }, [state]);
+
+  const saveSummaryMse = useCallback(async (mseCoefficient: number) => {
+    const roundRecord = currentRoundRecordRef.current;
+    if (!roundRecord || !currentRoundId) throw new Error('Current round is not ready to save yet.');
+
+    const normalizedMse = Math.max(0, Number(mseCoefficient || 0));
+    const appliedCard = roundRecord.metrics?.cci.card || lockedCciCard;
+    const nextMetrics = buildRoundMetrics({
+      ohmResult: roundRecord.ohmResult,
+      evaluation: roundRecord.evaluation,
+      mseCoefficient: normalizedMse,
+      mseSource: normalizedMse === 1 ? 'manual-default' : 'manual-adjusted',
+      mseMeasured: false,
+      cciCard: appliedCard,
+      cvrSource: roundRecord.metrics?.cvr.source || 'cvr-analysis',
+    });
+    const nextRound: RoundRecord = {
+      ...roundRecord,
+      metrics: nextMetrics,
+    };
+
+    currentRoundRecordRef.current = nextRound;
+    setMetrics(nextMetrics);
+    await saveRound(nextRound);
+    return nextMetrics;
+  }, [currentRoundId, lockedCciCard]);
 
   useEffect(() => () => clearCrewTimers(), [clearCrewTimers]);
 
@@ -696,11 +773,17 @@ export function useCaptionCrewRound() {
     crewName,
     captainPlayerId,
     crewPlayerId,
+    availableCciCards,
+    selectedCciCardId,
+    selectedCciCard: getCciCardById(availableCciCards, selectedCciCardId),
+    lockedCciCard,
     rolesConfigured: !!captainName.trim() && !!crewName.trim(),
     saveRoleSetup,
     replaceLearners,
     swapRoles,
     endRound,
+    selectCciCard,
+    saveSummaryMse,
     captainTranscript,
     crewTranscript,
     captainVerifiedTranscript,
@@ -726,5 +809,6 @@ export function useCaptionCrewRound() {
     startCrew,
     stopCrew,
     resetRound,
+    currentRoundId,
   };
 }

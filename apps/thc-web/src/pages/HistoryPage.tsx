@@ -253,6 +253,9 @@ function HistoryCard({ round }: { round: RoundRecord }) {
           <div className="analysis-detail-block">
             <span className="metric-label">CCI meaning analysis</span>
             <p className="analysis-reason">{round.evaluation?.reason || 'No evaluation summary available.'}</p>
+            {round.metrics?.cci && (
+              <p className="admin-message">Saved formula: {round.metrics.cci.card?.label || '1-on-1'} ({round.metrics.cci.card?.baseA || 10}A) × MSE {round.metrics.cci.mse.coefficient} × Semantics {(round.metrics.cci.llmMeaningPercent / 100).toFixed(4)} = {round.metrics.cci.current}A.</p>
+            )}
           </div>
 
           <div className="analysis-grid-two-up">

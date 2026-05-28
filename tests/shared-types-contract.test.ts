@@ -106,10 +106,13 @@ describe('shared type contracts', () => {
     expect(roomRound.metrics?.cvr.linguisticComplexity).toBe(2);
     expect(roomRound.metrics?.cvr.tensionLoad).toBe(1);
     expect(roomRound.metrics?.cvr.repeatCoefficient).toBe(1);
+    expect(roomRound.metrics?.scoringVersion).toBe('cvr-cci-cpd-v2');
     expect(roomRound.metrics?.cci.llmMeaningPercent).toBe(80);
-    expect(roomRound.metrics?.cci.score).toBe(0.8);
-    expect(roomRound.metrics?.cci.current).toBe(0.8);
-    expect(roomRound.metrics?.cpd.raw).toBe(19.2);
+    expect(roomRound.metrics?.cci.card.id).toBe('1-on-1');
+    expect(roomRound.metrics?.cci.card.baseA).toBe(10);
+    expect(roomRound.metrics?.cci.score).toBe(8);
+    expect(roomRound.metrics?.cci.current).toBe(8);
+    expect(roomRound.metrics?.cpd.raw).toBe(192);
     expect(roomRound.captainTranscriptMeta?.source).toBe('streaming-fallback-batch');
     expect(roomRound.crewTranscriptMeta?.transcriptProviderUsed).toBe('google');
   });

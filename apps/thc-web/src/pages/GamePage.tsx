@@ -1,8 +1,23 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { RefreshCw, Users, X } from 'lucide-react';
+import { Hand, RefreshCw, Users, Waves, X } from 'lucide-react';
 import { RolePanel } from '@/components/RolePanel';
 import { useRoundContext } from '@/context/RoundContext';
+
+function CciCardGlyph({ icon }: { icon: string }) {
+  if (icon === 'hand') return <Hand size={16} />;
+  if (icon === 'waves') return <Waves size={16} />;
+  if (icon === 'blocks') {
+    return (
+      <span className="cci-log-glyph" aria-hidden="true">
+        <span />
+        <span />
+        <span />
+      </span>
+    );
+  }
+  return <Users size={16} />;
+}
 
 function formatCountdown(ms: number | null) {
   if (ms == null) return '';
@@ -26,6 +41,7 @@ export default function GamePage() {
   const [captainInput, setCaptainInput] = useState('');
   const [crewInput, setCrewInput] = useState('');
   const [editingLearners, setEditingLearners] = useState(false);
+  const [cciMenuOpen, setCciMenuOpen] = useState(false);
 
   useEffect(() => {
     setCaptainInput(round.captainName || '');
@@ -37,6 +53,10 @@ export default function GamePage() {
       navigate('/summary', { replace: true });
     }
   }, [navigate, round.state]);
+
+  useEffect(() => {
+    if (round.state !== 'captain-ready') setCciMenuOpen(false);
+  }, [round.state]);
 
   const canEditLearners = round.state === 'captain-ready';
   const canEndRound = round.rolesConfigured && round.state !== 'captain-ready';
@@ -123,6 +143,47 @@ export default function GamePage() {
             >
               <Users size={18} />
             </button>
+            <div className="cci-card-menu-wrap">
+              <button
+                type="button"
+                className="ghost-pill-button cci-card-trigger"
+                onClick={() => setCciMenuOpen((prev) => !prev)}
+                disabled={!canEditLearners}
+                title={`${round.selectedCciCard.label} · ${round.selectedCciCard.baseA}A`}
+                aria-label={`Selected CCI card ${round.selectedCciCard.label} ${round.selectedCciCard.baseA}A`}
+                aria-expanded={cciMenuOpen}
+              >
+                <span className="cci-card-option-icon" aria-hidden="true"><CciCardGlyph icon={round.selectedCciCard.icon} /></span>
+                <span className="cci-card-trigger-badge">{round.selectedCciCard.baseA}A</span>
+              </button>
+              {cciMenuOpen && canEditLearners && (
+                <div className="cci-card-popover" role="menu" aria-label="CCI card selector">
+                  {round.availableCciCards.map((card) => {
+                    const selected = round.selectedCciCardId === card.id;
+                    return (
+                      <button
+                        key={card.id}
+                        type="button"
+                        className={`cci-card-mini ${selected ? 'is-selected' : ''}`}
+                        onClick={() => {
+                          round.selectCciCard(card.id);
+                          setCciMenuOpen(false);
+                        }}
+                        role="menuitemradio"
+                        aria-checked={selected}
+                        title={`${card.label} · ${card.baseA}A`}
+                      >
+                        <span className="cci-card-option-icon" aria-hidden="true"><CciCardGlyph icon={card.icon} /></span>
+                        <span className="cci-card-option-copy">
+                          <strong>{card.label}</strong>
+                          <small>{card.baseA}A</small>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
             {canEndRound && (
               <button
                 type="button"
@@ -168,7 +229,7 @@ export default function GamePage() {
           disabled={!round.canStartCrew}
           processing={round.state === 'crew-processing' || round.state === 'evaluating'}
           countdownLabel={round.state === 'crew-waiting' ? formatCountdown(round.countdownMs) : undefined}
-          helperText={round.state === 'crew-waiting' ? 'Reply in English before time runs out' : round.crewStreamingStatus}
+          helperText={round.state === 'crew-waiting' ? 'Reply in English — faster response gets higher RT' : round.crewStreamingStatus}
           transcriptPreview={round.crewRecorder.isRecording || !!round.crewLiveTranscript ? round.crewLiveTranscript : undefined}
           levels={round.crewRecorder.levels}
           onStart={() => void round.startCrew()}

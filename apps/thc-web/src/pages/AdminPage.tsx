@@ -20,6 +20,7 @@ import {
 import { transcribeRoundAudio } from '@/services/transcriptionService';
 import { useRoundRecorder } from '@/hooks/useRoundRecorder';
 import { analyzeTranscript, OhmAnalysisResult } from '@/services/aiService';
+import type { CciCard } from '@/types';
 
 interface TestState {
   status: 'idle' | 'loading' | 'success' | 'error';
@@ -31,6 +32,17 @@ const idleTestState: TestState = {
   status: 'idle',
   message: 'Not tested yet.',
 };
+
+function createDraftCciCard(nextOrder: number): CciCard {
+  return {
+    id: `cci-card-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    label: 'New card',
+    baseA: 10,
+    icon: 'hand',
+    active: true,
+    order: nextOrder,
+  };
+}
 
 function StatusBadge({ label, status }: { label: string; status: TestState['status'] | 'ready' | 'not-ready' | 'loading' }) {
   return <span className={`status-dot status-${status}`}>{label}</span>;
@@ -652,6 +664,54 @@ export default function AdminPage() {
         </div>
 
         <p className="admin-message">Allowed coefficients: 1, 1.5, 2, 2.5. overLong is fixed at 2.5.</p>
+      </section>
+
+      <section className="soft-card admin-section-minimal">
+        <div className="section-title-row">
+          <h2 className="section-title">CCI cards</h2>
+        </div>
+
+        <p className="admin-message">These cards define the base Ample for CCI. Round page users can only select from this list; evaluator MSE is still entered later on the summary page.</p>
+
+        <div className="admin-stack">
+          {config.cciCards.map((card, index) => (
+            <div key={card.id} className="admin-grid four-up cci-admin-row">
+              <label className="field-stack">
+                <span>Label</span>
+                <input value={card.label} onChange={(e) => setConfig((prev) => ({ ...prev, cciCards: prev.cciCards.map((entry) => entry.id === card.id ? { ...entry, label: e.target.value } : entry) }))} />
+              </label>
+              <label className="field-stack">
+                <span>Base A</span>
+                <input type="number" min={0} step={0.5} value={card.baseA} onChange={(e) => setConfig((prev) => ({ ...prev, cciCards: prev.cciCards.map((entry) => entry.id === card.id ? { ...entry, baseA: Number(e.target.value) || 0 } : entry) }))} />
+              </label>
+              <label className="field-stack">
+                <span>Icon</span>
+                <select value={card.icon} onChange={(e) => setConfig((prev) => ({ ...prev, cciCards: prev.cciCards.map((entry) => entry.id === card.id ? { ...entry, icon: e.target.value as CciCard['icon'] } : entry) }))}>
+                  <option value="hand">Hand</option>
+                  <option value="users">Users</option>
+                  <option value="waves">Waves</option>
+                  <option value="blocks">Blocks</option>
+                </select>
+              </label>
+              <div className="field-stack cci-admin-actions">
+                <span>State</span>
+                <div className="action-row">
+                  <label className="toggle-row"><input type="checkbox" checked={card.active} onChange={(e) => setConfig((prev) => ({ ...prev, cciCards: prev.cciCards.map((entry) => entry.id === card.id ? { ...entry, active: e.target.checked } : entry) }))} />Active</label>
+                  <button type="button" className="ghost-pill-button" onClick={() => setConfig((prev) => ({ ...prev, cciCards: prev.cciCards.filter((entry) => entry.id !== card.id).map((entry, idx) => ({ ...entry, order: idx })) }))} disabled={config.cciCards.length <= 1}>Remove</button>
+                  {index > 0 && <button type="button" className="ghost-pill-button" onClick={() => setConfig((prev) => {
+                    const next = [...prev.cciCards];
+                    [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                    return { ...prev, cciCards: next.map((entry, idx) => ({ ...entry, order: idx })) };
+                  })}>Up</button>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="action-row">
+          <button type="button" className="ghost-pill-button" onClick={() => setConfig((prev) => ({ ...prev, cciCards: [...prev.cciCards, createDraftCciCard(prev.cciCards.length)] }))}>Add CCI card</button>
+        </div>
       </section>
 
       <section className="soft-card admin-section-minimal">

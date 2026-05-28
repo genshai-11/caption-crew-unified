@@ -1,7 +1,13 @@
 import { getBytes, ref, uploadString } from 'firebase/storage';
 import { storage } from '@/lib/firebase';
-import type { VisualTheme } from '@/types';
+import type { CciCard, CciCardIcon, VisualTheme } from '@/types';
 import type { SemanticRuleOverrides } from '@/lib/ohmCalculator';
+
+const defaultCciCards: CciCard[] = [
+  { id: '1-on-1', label: '1-on-1', baseA: 10, icon: 'hand', active: true, order: 0 },
+  { id: 'rpd-free', label: 'RPD free', baseA: 15, icon: 'waves', active: true, order: 1 },
+  { id: 'n-chunks', label: 'n Chunks', baseA: 30, icon: 'blocks', active: true, order: 2 },
+];
 
 export interface AdminRuntimeConfig {
   transcriptProvider: 'deepgram' | 'google' | 'thirdparty';
@@ -62,6 +68,7 @@ export interface AdminRuntimeConfig {
   };
   meaningStrictness: 'loose' | 'medium' | 'strict';
   meaningWeight: number;
+  cciCards: CciCard[];
   feedbackEnabled: boolean;
   feedbackMode: 'gentle' | 'balanced' | 'detailed';
   feedbackTone: 'encouraging' | 'neutral' | 'strict';
@@ -132,12 +139,13 @@ export const defaultAdminRuntimeConfig: AdminRuntimeConfig = {
   ohmAgentTimeoutMs: 9000,
   ohmAgentShadowMode: true,
   ohmResponseTiming: {
-    fullScoreMs: 2000,
-    minScoreMs: 5000,
-    minCoefficient: 0.333333,
+    fullScoreMs: 1000,
+    minScoreMs: 3000,
+    minCoefficient: 0,
   },
   meaningStrictness: 'medium',
   meaningWeight: 100,
+  cciCards: defaultCciCards,
   feedbackEnabled: true,
   feedbackMode: 'gentle',
   feedbackTone: 'encouraging',
@@ -159,6 +167,52 @@ function normalizeVisualTheme(value?: string | null): VisualTheme {
   if (value === 'bold') return 'bold';
   if (value === 'swiss') return 'swiss';
   return 'minimal';
+}
+
+function normalizeCciCardIcon(value?: string | null): CciCardIcon {
+  if (value === 'hand') return 'hand';
+  if (value === 'waves') return 'waves';
+  if (value === 'blocks') return 'blocks';
+  return 'hand';
+}
+
+function slugifyCardId(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || `cci-card-${Date.now()}`;
+}
+
+function normalizeCciCards(raw?: unknown): CciCard[] {
+  const items = Array.isArray(raw) ? raw : defaultCciCards;
+  const normalized = items
+    .map((item, index) => {
+      const card = item as Partial<CciCard> | null | undefined;
+      const label = String(card?.label || '').trim();
+      const baseA = Number(card?.baseA);
+      if (!label || !Number.isFinite(baseA) || baseA <= 0) return null;
+      return {
+        id: slugifyCardId(String(card?.id || label)),
+        label,
+        baseA,
+        icon: normalizeCciCardIcon(card?.icon),
+        active: card?.active !== false,
+        order: Number.isFinite(Number(card?.order)) ? Number(card?.order) : index,
+      } satisfies CciCard;
+    })
+    .filter((card): card is CciCard => card != null)
+    .sort((a, b) => a.order - b.order);
+
+  if (normalized.length === 0) return defaultCciCards;
+
+  const seen = new Set<string>();
+  return normalized.map((card, index) => {
+    let nextId = card.id;
+    while (seen.has(nextId)) nextId = `${card.id}-${index + 1}`;
+    seen.add(nextId);
+    return { ...card, id: nextId, order: index };
+  });
 }
 
 function emitVisualTheme(theme: VisualTheme) {
@@ -199,11 +253,12 @@ function normalizeAdminConfig(raw?: Partial<AdminRuntimeConfig> | null): AdminRu
     ohmAgentTimeoutMs: Number(raw?.ohmAgentTimeoutMs || defaultAdminRuntimeConfig.ohmAgentTimeoutMs),
     ohmAgentShadowMode: raw?.ohmAgentShadowMode !== false,
     ohmResponseTiming: {
-      fullScoreMs: Number(raw?.ohmResponseTiming?.fullScoreMs || defaultAdminRuntimeConfig.ohmResponseTiming.fullScoreMs),
-      minScoreMs: Number(raw?.ohmResponseTiming?.minScoreMs || defaultAdminRuntimeConfig.ohmResponseTiming.minScoreMs),
-      minCoefficient: Number(raw?.ohmResponseTiming?.minCoefficient || defaultAdminRuntimeConfig.ohmResponseTiming.minCoefficient),
+      fullScoreMs: Number(raw?.ohmResponseTiming?.fullScoreMs ?? defaultAdminRuntimeConfig.ohmResponseTiming.fullScoreMs),
+      minScoreMs: Number(raw?.ohmResponseTiming?.minScoreMs ?? defaultAdminRuntimeConfig.ohmResponseTiming.minScoreMs),
+      minCoefficient: Number(raw?.ohmResponseTiming?.minCoefficient ?? defaultAdminRuntimeConfig.ohmResponseTiming.minCoefficient),
     },
     visualTheme: normalizeVisualTheme(raw?.visualTheme || defaultAdminRuntimeConfig.visualTheme),
+    cciCards: normalizeCciCards(raw?.cciCards),
     semanticOhmCurrent: Number(raw?.semanticOhmCurrent || defaultAdminRuntimeConfig.semanticOhmCurrent),
     ohmModel: String(raw?.ohmModel || raw?.router9Model || defaultAdminRuntimeConfig.ohmModel),
     ohmFallbackModel: String(raw?.ohmFallbackModel || raw?.router9FallbackModel || defaultAdminRuntimeConfig.ohmFallbackModel),

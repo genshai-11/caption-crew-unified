@@ -32,12 +32,16 @@ _Avoid_: Hiding response time inside TC, LC, or TL
 The repetition/habituation multiplier applied explicitly in CVR; v1 defaults to 1 until the product has repeat input.
 _Avoid_: Dropping RC from the formula because the current UI cannot measure it yet
 
+**CCI card**:
+The selectable scoring basis that contributes the base Ample for a round, for example `1-on-1 = 10A`, `RPD free = 15A`, or `n Chunks = 30A`.
+_Avoid_: Treating the card as a UI-only theme toggle
+
 **CCI — Conscious Current Intensity**:
-The GREEN current calculated as meaning decimal multiplied by MSE, e.g. 96% meaning becomes `0.96 × MSE`; displayed and stored with unit `A`.
+The GREEN current calculated as **CCI card** base Ample × **MSE** × meaning decimal; displayed and stored with unit `A`.
 _Avoid_: Treating CCI as the raw percentage number
 
 **MSE — Motion, Sound, Emotion coefficient**:
-The embodied-performance multiplier applied to LLM meaning when calculating CCI; v1 stores it as `coefficient: 1`, `source: "manual-default"`, and `measured: false` until the app can measure Motion, Sound, and Emotion directly.
+The evaluator-entered embodied-performance multiplier applied to the selected **CCI card** when calculating CCI.
 _Avoid_: Grammar score, pronunciation-only score
 
 **CPD — Conscious Potential Difference**:
@@ -48,9 +52,10 @@ _Avoid_: Generic total score, winner points
 
 - **CVR** replaces user-facing “OHM analysis” language.
 - **Raw CVR units** may still be stored in legacy-compatible technical fields such as `ohmResult` while the app migrates to canonical metric fields.
-- **CCI** equals meaning decimal × **MSE**; convert 96% to `0.96` before multiplying.
+- **CCI** equals **CCI card** base Ample × **MSE** × meaning decimal; convert 96% to `0.96` before multiplying.
 - **MSE** is part of **CCI**, not a separate replacement for meaning evaluation.
-- In v1, **MSE** defaults to 1 and is explicitly marked as not measured.
+- The chosen **CCI card** is selected on the round page and locks when Captain starts.
+- **MSE** is entered by the evaluator on the summary page and persisted only when they explicitly save the round evaluation.
 - **CVR** equals **estimatedTC** × **LC** × **TL** × **Response Time Coefficient** × **Repeat Coefficient**.
 - In v1, **Repeat Coefficient** is stored/displayed as `1` because repeat input is not available yet.
 - **CPD** equals **CCI** × **CVR** using CCI as a decimal current, not as a 0–100 percentage.
@@ -65,15 +70,34 @@ _Avoid_: Generic total score, winner points
 > **Domain expert:** “Use **CVR analysis**. If needed, show the old value as **raw CVR units**, but don’t teach users that OHM is the canonical metric.”
 >
 > **Dev:** “Is CCI just the LLM meaning score?”
-> **Domain expert:** “No. **CCI = LLM meaning percentage × MSE**. The current app already has the LLM meaning percentage; MSE is the embodied multiplier.”
+> **Domain expert:** “No. **CCI = CCI card × MSE × semantics**. The selected card supplies the base Ample, MSE is the evaluator multiplier, and semantics is the preserved meaning percentage.”
 >
 > **Dev:** “Should CPD be only a normalized leaderboard number?”
 > **Domain expert:** “No. **CPD = CCI × CVR**. Store the raw multiplication for theory fidelity and a normalized score for comparison.”
 
+## Dashboard role analysis
+
+**Captain = Improvisation & Adaptation (via CVR)**:
+The dashboard reads Captain skill through CVR and its components. Higher CVR means the Captain can construct harder, more complex prompts.
+- CVR component profile (TC, TL, LC) reveals the Captain's tendency — whether they challenge through topic breadth (TC), tension/cognitive load (TL), or linguistic difficulty (LC).
+- CVR components are displayed as **percentile-normalized** values relative to all rounds, so different scales (TC is a count, TL/LC are multipliers) are visually comparable.
+- CVR difficulty bands: **0–15Ω** (Dễ), **15–35Ω** (Vừa), **35–60Ω** (Khó), **60Ω+** (Extreme).
+
+**Crew = Static Composure (via CCI + CPD)**:
+The dashboard reads Crew skill through CCI stability under varying CVR pressure. A strong Crew maintains consistent CCI regardless of Captain's CVR level.
+- **Static stability** = consistency of CCI and reaction-delay across rounds.
+- **CPD coverage ceiling** = the highest CVR at which Crew still passed the meaning threshold. This shows how far Crew's composure extends.
+- The Crew pass/fail threshold is **dynamic** — sourced from the admin-configured `crewWinThreshold` in Firestore `game_settings/scoring`, not hardcoded.
+
+**Flexible charts**:
+Dashboard charts are configurable: admin can switch chart type (bar, scatter, line, heatmap), change X/Y axes to any available metric, or select from preset views. Presets provide sensible defaults but do not lock the visualization.
+
 ## Flagged ambiguities
 
 - “OHM” was used as both a product proxy for resistance and the visible metric name — resolved: user-facing language should be **CVR**, with OHM retained only as backward-compatible implementation language during migration.
-- “CCI” was almost reduced to LLM meaning alone — resolved: **CCI = current LLM meaning percentage × MSE**.
+- “CCI” was almost reduced to LLM meaning alone — resolved: **CCI = CCI card base Ample × MSE × semantics decimal**.
+- “MSE” could be treated as a local-only display knob — resolved: the evaluator enters **MSE** on the summary page, then explicitly saves it into round metrics for History/Profile/chart reuse.
 - “CPD score” could be confused with gameplay winner points — resolved: **CPD raw** preserves `CCI × CVR`, while **CPD score** is normalized for UI comparison.
 - **Repeat Coefficient** currently has no app input — resolved: keep it explicit in the CVR formula and default it to `1` in v1 instead of removing it.
 - “CPU” was used while discussing charts — resolved: this product should use **CPD**, not CPU, to stay aligned with Chunks Law.
+- “SUCCESS_THRESHOLD” was hardcoded at 50 in the dashboard — resolved: use the live `crewWinThreshold` from admin scoring config so dashboard and gameplay agree on what “Crew passed” means.

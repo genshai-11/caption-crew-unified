@@ -73,9 +73,9 @@ const defaultSharedConfig = {
   ohmAgentTimeoutMs: 9000,
   ohmAgentShadowMode: true,
   ohmResponseTiming: {
-    fullScoreMs: 2000,
-    minScoreMs: 5000,
-    minCoefficient: 0.333333,
+    fullScoreMs: 1000,
+    minScoreMs: 3000,
+    minCoefficient: 0,
   },
   meaningStrictness: 'medium',
   meaningWeight: 100,

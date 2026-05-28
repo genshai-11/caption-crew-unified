@@ -74,6 +74,23 @@ export interface OhmResult {
 
 export type MetricColor = 'RED' | 'GREEN' | 'BLUE';
 export type MseSource = 'manual-default' | 'manual-adjusted' | 'measured';
+export type CciCardIcon = 'hand' | 'users' | 'waves' | 'blocks';
+
+export interface CciCard {
+  id: string;
+  label: string;
+  baseA: number;
+  icon: CciCardIcon;
+  active: boolean;
+  order: number;
+}
+
+export interface AppliedCciCard {
+  id: string;
+  label: string;
+  baseA: number;
+  icon: CciCardIcon;
+}
 
 export interface MseMetric {
   coefficient: number;
@@ -109,9 +126,10 @@ export interface CciMetric {
   unit: 'A';
   llmMeaningPercent: number;
   mse: MseMetric;
+  card: AppliedCciCard;
   current: number;
   score: number;
-  formula: 'meaningDecimal × mseCoefficient';
+  formula: 'cardBaseA × mseCoefficient × meaningDecimal';
 }
 
 export interface CpdMetric {
@@ -126,7 +144,7 @@ export interface RoundMetrics {
   cvr: CvrMetric;
   cci: CciMetric;
   cpd: CpdMetric;
-  scoringVersion: 'cvr-cci-cpd-v1';
+  scoringVersion: 'cvr-cci-cpd-v1' | 'cvr-cci-cpd-v2';
 }
 
 export interface BuildRoundMetricsOptions {
@@ -135,6 +153,7 @@ export interface BuildRoundMetricsOptions {
   mseCoefficient?: number;
   mseSource?: MseSource;
   mseMeasured?: boolean;
+  cciCard?: Partial<CciCard> | null;
   cvrTargetRawUnits?: number;
   cvrSource?: string;
 }
@@ -192,13 +211,24 @@ export function buildCvrMetric(ohmResult?: OhmResult | null, options?: Pick<Buil
   };
 }
 
-export function buildCciMetric(evaluation?: MeaningEvaluation | null, mse?: Partial<MseMetric> | null): CciMetric {
+export function buildCciMetric(
+  evaluation?: MeaningEvaluation | null,
+  mse?: Partial<MseMetric> | null,
+  cciCard?: Partial<CciCard> | null,
+): CciMetric {
   const llmMeaningPercent = clampMetric(Number(evaluation?.matchScore || 0));
   const meaningDecimal = llmMeaningPercent / 100;
   const coefficient = Math.max(0, Number(mse?.coefficient ?? 1));
   const measured = mse?.measured === true;
   const source = mse?.source || (coefficient === 1 && !measured ? 'manual-default' : 'manual-adjusted');
-  const current = meaningDecimal * coefficient;
+  const cardBaseA = Math.max(0, Number(cciCard?.baseA ?? 10));
+  const card: AppliedCciCard = {
+    id: String(cciCard?.id || '1-on-1'),
+    label: String(cciCard?.label || '1-on-1'),
+    baseA: roundMetric(cardBaseA, 4),
+    icon: cciCard?.icon === 'hand' || cciCard?.icon === 'waves' || cciCard?.icon === 'blocks' ? cciCard.icon : 'hand',
+  };
+  const current = card.baseA * coefficient * meaningDecimal;
 
   return {
     color: 'GREEN',
@@ -209,9 +239,10 @@ export function buildCciMetric(evaluation?: MeaningEvaluation | null, mse?: Part
       source,
       measured,
     },
+    card,
     current: roundMetric(current, 4),
     score: roundMetric(current, 4),
-    formula: 'meaningDecimal × mseCoefficient',
+    formula: 'cardBaseA × mseCoefficient × meaningDecimal',
   };
 }
 
@@ -237,14 +268,14 @@ export function buildRoundMetrics(options: BuildRoundMetricsOptions): RoundMetri
     coefficient: options.mseCoefficient ?? 1,
     source: options.mseSource || ((options.mseCoefficient ?? 1) === 1 ? 'manual-default' : 'manual-adjusted'),
     measured: options.mseMeasured === true,
-  });
+  }, options.cciCard);
   const cpd = buildCpdMetric(cvr, cci);
 
   return {
     cvr,
     cci,
     cpd,
-    scoringVersion: 'cvr-cci-cpd-v1',
+    scoringVersion: 'cvr-cci-cpd-v2',
   };
 }
 

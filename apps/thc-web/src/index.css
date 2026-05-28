@@ -638,6 +638,9 @@ input:focus, select:focus {
   gap: 16px;
   align-items: stretch;
 }
+.metric-cci-meta-row-3up {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 .metric-primary-cci .metric-title {
   font-size: 16px;
   font-weight: 900;
@@ -695,6 +698,12 @@ input:focus, select:focus {
   font-size: 22px;
   font-weight: 500;
 }
+.metric-mse-save {
+  margin-top: 6px;
+}
+.metric-save-message {
+  margin: 0;
+}
 .learner-compact-bar {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -733,6 +742,81 @@ input:focus, select:focus {
   gap: 8px;
   flex-wrap: nowrap;
 }
+.cci-card-menu-wrap {
+  position: relative;
+}
+.cci-card-trigger {
+  min-height: 42px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.cci-card-trigger-badge {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #0f8a64;
+}
+.cci-card-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 15;
+  min-width: 220px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255,255,255,0.96);
+  box-shadow: 0 18px 42px rgba(15,23,42,0.16);
+}
+.cci-card-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid rgba(16,185,129,0.14);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.88);
+  color: var(--text);
+  cursor: pointer;
+}
+.cci-card-mini.is-selected {
+  border-color: rgba(16,185,129,0.28);
+  background: rgba(16,185,129,0.1);
+  color: #0f8a64;
+}
+.cci-card-option-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.84);
+}
+.cci-log-glyph {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+}
+.cci-log-glyph span {
+  width: 4px;
+  height: 12px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.9;
+}
+.cci-card-option-copy {
+  display: grid;
+  text-align: left;
+}
+.cci-card-option-copy small {
+  color: var(--muted);
+}
 .icon-only-button {
   width: 42px;
   min-width: 42px;
@@ -748,9 +832,16 @@ input:focus, select:focus {
 }
 .summary-audio-block,
 .summary-transcript-block,
-.analysis-detail-block {
+.analysis-detail-block,
+.admin-stack {
   display: grid;
   gap: 10px;
+}
+.cci-admin-row {
+  align-items: end;
+}
+.cci-admin-actions {
+  justify-content: end;
 }
 .summary-audio-player {
   width: 100%;
@@ -848,6 +939,73 @@ input:focus, select:focus {
 .profile-chart-wrap {
   display: grid;
   gap: 10px;
+}
+.profile-chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  font-size: 13px;
+}
+.profile-chart-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.profile-chart-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+}
+.profile-chart-legend-line {
+  width: 22px;
+  height: 0;
+  border-top: 3px solid var(--line);
+  flex: 0 0 auto;
+}
+.profile-chart-guide {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255,255,255,0.62);
+}
+.profile-chart-guide h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.profile-chart-guide p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.profile-chart-guide-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.profile-chart-guide-list li {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+.profile-chart-guide-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  margin-top: 6px;
+}
+.profile-chart-guide-list strong {
+  display: block;
+  font-size: 13px;
 }
 .profile-chart-svg {
   width: 100%;
@@ -1048,6 +1206,13 @@ input:focus, select:focus {
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     gap: 8px;
     padding: 12px;
+  }
+  .metric-cci-meta-row-3up,
+  .cci-card-selector-bar {
+    grid-template-columns: 1fr;
+  }
+  .cci-card-selector-list {
+    justify-content: flex-start;
   }
   .learner-compact-role {
     font-size: 10px;
