@@ -520,7 +520,7 @@ export default function FlexibleChart({ roleRounds, presets, defaultPresetId, cr
 
   return (
     <div className="profile-chart-wrap">
-      <div className="action-row" style={{ gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
+      <div className="action-row profile-chart-controls">
         <select
           value={activePresetId}
           onChange={(event) => {

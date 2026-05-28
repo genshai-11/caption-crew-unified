@@ -940,6 +940,14 @@ input:focus, select:focus {
   display: grid;
   gap: 10px;
 }
+.profile-chart-controls {
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.profile-chart-controls select {
+  min-width: 150px;
+}
 .profile-chart-legend {
   display: flex;
   flex-wrap: wrap;
@@ -1213,6 +1221,14 @@ input:focus, select:focus {
   }
   .cci-card-selector-list {
     justify-content: flex-start;
+  }
+  .profile-chart-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .profile-chart-controls select {
+    width: 100%;
+    min-width: 0;
   }
   .learner-compact-role {
     font-size: 10px;
