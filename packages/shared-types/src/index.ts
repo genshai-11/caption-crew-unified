@@ -129,7 +129,7 @@ export interface CciMetric {
   card: AppliedCciCard;
   current: number;
   score: number;
-  formula: 'cardBaseA × mseCoefficient × meaningDecimal';
+  formula: 'cciCards × (mseCoefficient + semanticsDecimal)';
 }
 
 export interface CpdMetric {
@@ -156,6 +156,8 @@ export interface BuildRoundMetricsOptions {
   cciCard?: Partial<CciCard> | null;
   cvrTargetRawUnits?: number;
   cvrSource?: string;
+  /** cciCards = card/count factor used in CCI current; room flow passes the CVR chunk count. */
+  cciCards?: number;
 }
 
 function clampMetric(value: number, min = 0, max = 100) {
@@ -215,20 +217,22 @@ export function buildCciMetric(
   evaluation?: MeaningEvaluation | null,
   mse?: Partial<MseMetric> | null,
   cciCard?: Partial<CciCard> | null,
+  options?: { cciCards?: number },
 ): CciMetric {
   const llmMeaningPercent = clampMetric(Number(evaluation?.matchScore || 0));
-  const meaningDecimal = llmMeaningPercent / 100;
+  const semanticsDecimal = llmMeaningPercent / 100;
   const coefficient = Math.max(0, Number(mse?.coefficient ?? 1));
   const measured = mse?.measured === true;
   const source = mse?.source || (coefficient === 1 && !measured ? 'manual-default' : 'manual-adjusted');
   const cardBaseA = Math.max(0, Number(cciCard?.baseA ?? 10));
+  const effectiveCards = Math.max(1, Number(options?.cciCards ?? cardBaseA));
   const card: AppliedCciCard = {
     id: String(cciCard?.id || '1-on-1'),
     label: String(cciCard?.label || '1-on-1'),
-    baseA: roundMetric(cardBaseA, 4),
+    baseA: roundMetric(effectiveCards, 4),
     icon: cciCard?.icon === 'hand' || cciCard?.icon === 'waves' || cciCard?.icon === 'blocks' ? cciCard.icon : 'hand',
   };
-  const current = card.baseA * coefficient * meaningDecimal;
+  const current = card.baseA * (coefficient + semanticsDecimal);
 
   return {
     color: 'GREEN',
@@ -242,7 +246,7 @@ export function buildCciMetric(
     card,
     current: roundMetric(current, 4),
     score: roundMetric(current, 4),
-    formula: 'cardBaseA × mseCoefficient × meaningDecimal',
+    formula: 'cciCards × (mseCoefficient + semanticsDecimal)',
   };
 }
 
@@ -264,11 +268,12 @@ export function buildRoundMetrics(options: BuildRoundMetricsOptions): RoundMetri
     cvrTargetRawUnits: options.cvrTargetRawUnits,
     cvrSource: options.cvrSource,
   });
+  const cciCards = options.cciCards != null ? options.cciCards : undefined;
   const cci = buildCciMetric(options.evaluation, {
     coefficient: options.mseCoefficient ?? 1,
     source: options.mseSource || ((options.mseCoefficient ?? 1) === 1 ? 'manual-default' : 'manual-adjusted'),
     measured: options.mseMeasured === true,
-  }, options.cciCard);
+  }, options.cciCard, { cciCards });
   const cpd = buildCpdMetric(cvr, cci);
 
   return {
@@ -329,6 +334,7 @@ export type RoomRoundStatus = 'captain_speaking' | 'crew_speaking' | 'evaluating
 
 export interface RoomDoc {
   hostId: string;
+  // Active 1v1 slot (resolves from team roster if team mode enabled)
   captainId?: string | null;
   crewId?: string | null;
   captainName?: string | null;
@@ -339,6 +345,15 @@ export interface RoomDoc {
   status: RoomStatus;
   createdAt: any;
   updatedAt: any;
+  // Team faceoff fields (optional — present when teamMode is active)
+  teamMode?: boolean;
+  teamA?: string[];           // player UIDs for Team A (Captain team)
+  teamB?: string[];           // player UIDs for Team B (Crew team)
+  teamANames?: string[];
+  teamBNames?: string[];
+  teamAIndex?: number;        // current active player index in teamA
+  teamBIndex?: number;        // current active player index in teamB
+  swapAfterRound?: boolean;   // if true, teams swap roles each round
 }
 
 export interface RoomRoundDoc {
@@ -350,7 +365,7 @@ export interface RoomRoundDoc {
   crewStartedAtMs?: number;
   crewDeadlineAtMs?: number;
   winnerRole?: 'captain' | 'crew' | 'none';
-  endReason?: 'meaning' | 'crew_timeout' | 'manual';
+  endReason?: 'meaning' | 'crew_timeout' | 'manual' | 'cvr_out_of_range' | 'perfect_crew';
   captainPlayerId?: string | null;
   crewPlayerId?: string | null;
   captainTranscript?: string;

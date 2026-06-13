@@ -602,7 +602,7 @@ export default function AdminPage() {
         <div className="section-title-row">
           <h2 className="section-title">Chunks scoring</h2>
         </div>
-        <p className="admin-message">CCI = current LLM meaning % × MSE. MSE defaults to 1 because Motion / Sound / Emotion is not measured automatically yet.</p>
+        <p className="admin-message">CCI (A) = CCI cards × (MSE + Semantics decimal). Example: 75% → 0.75. MSE defaults to 1 because Motion / Sound / Emotion is not measured automatically yet.</p>
         <div className="admin-grid two-up">
           <label className="field-stack">
             <span>MSE coefficient</span>
@@ -649,7 +649,80 @@ export default function AdminPage() {
             />
           </label>
         </div>
-        <p className="admin-message">CPD stores both raw CCI × CVR for Chunks theory fidelity and a normalized blue score for UI comparison.</p>
+        <p className="admin-message">CPD stores raw CCI × CVR for Chunks theory fidelity and a normalized blue score for UI comparison.</p>
+      </section>
+
+      <section className="soft-card admin-section-minimal">
+        <div className="section-title-row">
+          <h2 className="section-title">Team faceoff</h2>
+        </div>
+        <p className="admin-message">Team mode supports dynamic rosters (any size). Players rotate within their team each round. CVR range gate auto-awards crew win when Captain's prompt is outside the valid difficulty window.</p>
+        <div className="admin-grid two-up">
+          <label className="field-stack">
+            <span>Team mode</span>
+            <select
+              value={scoring.teamMode ? 'on' : 'off'}
+              onChange={(e) => setScoring((prev) => ({ ...prev, teamMode: e.target.value === 'on' }))}
+            >
+              <option value="off">Off (1v1)</option>
+              <option value="on">On (team)</option>
+            </select>
+          </label>
+          <label className="field-stack">
+            <span>Max team size</span>
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={scoring.maxTeamSize}
+              onChange={(e) => setScoring((prev) => ({ ...prev, maxTeamSize: Number(e.target.value) || 10 }))}
+            />
+          </label>
+        </div>
+        <div className="admin-grid two-up">
+          <label className="field-stack">
+            <span>CVR min (Ω) — too easy if below</span>
+            <input
+              type="number"
+              min={0}
+              step={0.5}
+              value={scoring.cvrMinVolt}
+              onChange={(e) => setScoring((prev) => ({ ...prev, cvrMinVolt: Number(e.target.value) }))}
+            />
+          </label>
+          <label className="field-stack">
+            <span>CVR max (Ω) — out of range if above</span>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={scoring.cvrMaxVolt}
+              onChange={(e) => setScoring((prev) => ({ ...prev, cvrMaxVolt: Number(e.target.value) || 50 }))}
+            />
+          </label>
+        </div>
+        <div className="admin-grid two-up">
+          <label className="field-stack">
+            <span>Perfect crew bonus</span>
+            <select
+              value={scoring.enablePerfectCrewBonus ? 'on' : 'off'}
+              onChange={(e) => setScoring((prev) => ({ ...prev, enablePerfectCrewBonus: e.target.value === 'on' }))}
+            >
+              <option value="on">On (100% semantic + MSE → crew wins)</option>
+              <option value="off">Off</option>
+            </select>
+          </label>
+          <label className="field-stack">
+            <span>Swap roles after round</span>
+            <select
+              value={scoring.swapAfterRound ? 'on' : 'off'}
+              onChange={(e) => setScoring((prev) => ({ ...prev, swapAfterRound: e.target.value === 'on' }))}
+            >
+              <option value="off">Off</option>
+              <option value="on">On (Team A↔Team B each round)</option>
+            </select>
+          </label>
+        </div>
       </section>
 
       <section className="soft-card admin-section-minimal">

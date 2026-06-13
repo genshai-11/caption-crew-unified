@@ -46,11 +46,41 @@ This runbook chuẩn hóa mọi thay đổi production: deploy frontend/function
 - Length coefficients (dynamic allowed set): `1, 1.5, 2, 2.5`
 - `overLong = 2.5` (same as LONG)
 
-Final score:
+Final CVR score:
 
 `totalOhm = baseOhm * lengthCoefficient`
 
 Trong đó `baseOhm` lấy theo rule sum/multiply từ nhóm label.
+
+### CCI formula (v3 — team faceoff)
+
+```
+CCI_A = cciCards × (MSE + SemanticsDecimal)
+```
+
+`SemanticsDecimal` converts LLM meaning percent into decimal form (75% → `0.75`). Stored in `metrics.cci.current`. Canonical `CPD = CCI × CVR` remains in `metrics.cpd.raw`.
+
+### Team faceoff round-end rules (layered)
+
+| Priority | Condition | Winner | endReason |
+|---|---|---|---|
+| 1 | CVR outside `[cvrMinVolt, cvrMaxVolt]` | Crew | `cvr_out_of_range` |
+| 2 | 100% semantic + MSE ≥ 1 + bonus enabled | Crew | `perfect_crew` |
+| 3 | %semantic ≥ crewWinThreshold | Crew | `meaning` |
+| 3 | %semantic < crewWinThreshold | Captain | `meaning` |
+
+### New admin scoring settings (v3)
+
+| Field | Default | Description |
+|---|---|---|
+| `teamMode` | false | Enable team roster mode (dynamic size) |
+| `cvrMinVolt` | 1 | Min valid CVR Ω — below = too easy → crew wins |
+| `cvrMaxVolt` | 50 | Max valid CVR Ω — above = out of range → crew wins |
+| `enablePerfectCrewBonus` | true | 100% semantic + MSE ≥ 1 → crew auto-wins |
+| `swapAfterRound` | false | Swap Team A↔Team B roles after each round |
+| `maxTeamSize` | 10 | Max players per team slot |
+
+Stored in Firestore `game_settings/scoring`.
 
 ---
 

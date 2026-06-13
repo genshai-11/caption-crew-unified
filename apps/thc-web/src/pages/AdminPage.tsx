@@ -671,7 +671,7 @@ export default function AdminPage() {
           <h2 className="section-title">CCI cards</h2>
         </div>
 
-        <p className="admin-message">These cards define the base Ample for CCI. Round page users can only select from this list; evaluator MSE is still entered later on the summary page.</p>
+        <p className="admin-message">These cards define the CCI card factor. Runtime formula: CCI (A) = CCI cards × (MSE + Semantics decimal). Example: 75% → 0.75. Round page users can only select from this list; evaluator MSE is still entered later on the summary page.</p>
 
         <div className="admin-stack">
           {config.cciCards.map((card, index) => (

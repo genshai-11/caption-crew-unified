@@ -110,9 +110,10 @@ describe('shared type contracts', () => {
     expect(roomRound.metrics?.cci.llmMeaningPercent).toBe(80);
     expect(roomRound.metrics?.cci.card.id).toBe('1-on-1');
     expect(roomRound.metrics?.cci.card.baseA).toBe(10);
-    expect(roomRound.metrics?.cci.score).toBe(8);
-    expect(roomRound.metrics?.cci.current).toBe(8);
-    expect(roomRound.metrics?.cpd.raw).toBe(192);
+    expect(roomRound.metrics?.cci.formula).toBe('cciCards × (mseCoefficient + semanticsDecimal)');
+    expect(roomRound.metrics?.cci.score).toBe(18);
+    expect(roomRound.metrics?.cci.current).toBe(18);
+    expect(roomRound.metrics?.cpd.raw).toBe(432);
     expect(roomRound.captainTranscriptMeta?.source).toBe('streaming-fallback-batch');
     expect(roomRound.crewTranscriptMeta?.transcriptProviderUsed).toBe('google');
   });

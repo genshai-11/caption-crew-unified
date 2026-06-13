@@ -48,11 +48,38 @@ _Avoid_: Grammar score, pronunciation-only score
 The BLUE unified metric produced by multiplying CCI by CVR; displayed and stored with unit `V`.
 _Avoid_: Generic total score, winner points
 
+## CCI formula (team faceoff)
+
+The updated **CCI (A)** formula used for team-faceoff round scoring:
+
+```
+CCI_A = cciCards × (MSE + SemanticsDecimal)
+```
+
+- `SemanticsDecimal` = LLM meaning match score divided by 100 (for example, 75% → `0.75`)
+- `MSE` = evaluator-entered Motion/Sound/Emotion coefficient (default 1)
+- `cciCards` = selected CCI card factor or semantic chunk card count (minimum 1 as fallback)
+
+Stored as `metrics.cci.current`; canonical `metrics.cpd.raw` remains `CCI × CVR`.
+
+## Team faceoff round-end rules (layered, most specific first)
+
+1. **CVR out-of-range** (`endReason: 'cvr_out_of_range'`): If Captain's CVR raw voltage is outside admin-configured `[cvrMinVolt, cvrMaxVolt]` window → **Crew (Team B) auto-wins**. The prompt was too easy or too hard to be valid.
+2. **Perfect crew** (`endReason: 'perfect_crew'`): If Crew scores 100% semantic AND `MSE ≥ 1` (with `enablePerfectCrewBonus` on) → **Crew auto-wins unconditionally**.
+3. **Normal** (`endReason: 'meaning'`): `%semantic ≥ crewWinThreshold` → Crew wins, else Captain wins.
+
+## Team roster structure
+
+- `teamMode: boolean` — enables team roster; players rotate slots each round.
+- `teamA` / `teamB` — dynamic arrays of player UIDs (any size, admin-configurable `maxTeamSize`).
+- `teamAIndex` / `teamBIndex` — pointer to the currently active player in each team; auto-incremented after each round.
+- `swapAfterRound` — when true, Team A ↔ Team B swap Captain/Crew roles after each round instead of just rotating within team.
+
 ## Relationships
 
 - **CVR** replaces user-facing “OHM analysis” language.
 - **Raw CVR units** may still be stored in legacy-compatible technical fields such as `ohmResult` while the app migrates to canonical metric fields.
-- **CCI** equals **CCI card** base Ample × **MSE** × meaning decimal; convert 96% to `0.96` before multiplying.
+- **CCI** equals **CCI card/card-count factor** × (**MSE** + **SemanticsDecimal**), where SemanticsDecimal is the LLM meaning match score divided by 100.
 - **MSE** is part of **CCI**, not a separate replacement for meaning evaluation.
 - The chosen **CCI card** is selected on the round page and locks when Captain starts.
 - **MSE** is entered by the evaluator on the summary page and persisted only when they explicitly save the round evaluation.
@@ -70,7 +97,7 @@ _Avoid_: Generic total score, winner points
 > **Domain expert:** “Use **CVR analysis**. If needed, show the old value as **raw CVR units**, but don’t teach users that OHM is the canonical metric.”
 >
 > **Dev:** “Is CCI just the LLM meaning score?”
-> **Domain expert:** “No. **CCI = CCI card × MSE × semantics**. The selected card supplies the base Ample, MSE is the evaluator multiplier, and semantics is the preserved meaning percentage.”
+> **Domain expert:** “No. **CCI = CCI cards × (MSE + SemanticsDecimal)**. The selected card/card-count supplies the CCI factor, MSE is the evaluator coefficient, and SemanticsDecimal converts preserved meaning percentage into decimal form.”
 >
 > **Dev:** “Should CPD be only a normalized leaderboard number?”
 > **Domain expert:** “No. **CPD = CCI × CVR**. Store the raw multiplication for theory fidelity and a normalized score for comparison.”
@@ -95,7 +122,7 @@ Dashboard charts are configurable: admin can switch chart type (bar, scatter, li
 ## Flagged ambiguities
 
 - “OHM” was used as both a product proxy for resistance and the visible metric name — resolved: user-facing language should be **CVR**, with OHM retained only as backward-compatible implementation language during migration.
-- “CCI” was almost reduced to LLM meaning alone — resolved: **CCI = CCI card base Ample × MSE × semantics decimal**.
+- “CCI” was almost reduced to LLM meaning alone — resolved: **CCI = CCI cards × (MSE + SemanticsDecimal)**.
 - “MSE” could be treated as a local-only display knob — resolved: the evaluator enters **MSE** on the summary page, then explicitly saves it into round metrics for History/Profile/chart reuse.
 - “CPD score” could be confused with gameplay winner points — resolved: **CPD raw** preserves `CCI × CVR`, while **CPD score** is normalized for UI comparison.
 - **Repeat Coefficient** currently has no app input — resolved: keep it explicit in the CVR formula and default it to `1` in v1 instead of removing it.

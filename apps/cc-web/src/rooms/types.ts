@@ -15,6 +15,15 @@ export interface RoomDoc {
   status: RoomStatus;
   createdAt: any;
   updatedAt: any;
+  // Team faceoff (optional — only present when teamMode active)
+  teamMode?: boolean;
+  teamA?: string[];        // UIDs for Team A (starts as Captain team)
+  teamB?: string[];        // UIDs for Team B (starts as Crew team)
+  teamANames?: string[];
+  teamBNames?: string[];
+  teamAIndex?: number;     // rotating slot pointer for Team A
+  teamBIndex?: number;     // rotating slot pointer for Team B
+  swapAfterRound?: boolean;
 }
 
 export interface RoomRoundDoc {
@@ -29,7 +38,7 @@ export interface RoomRoundDoc {
   // Optional timeout metadata
   crewDeadlineAtMs?: number;
   winnerRole?: 'captain' | 'crew' | 'none';
-  endReason?: 'meaning' | 'crew_timeout' | 'manual';
+  endReason?: 'meaning' | 'crew_timeout' | 'manual' | 'cvr_out_of_range' | 'perfect_crew';
 
   captainPlayerId?: string | null;
   crewPlayerId?: string | null;

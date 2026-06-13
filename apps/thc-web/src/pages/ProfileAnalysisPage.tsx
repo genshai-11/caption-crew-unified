@@ -319,7 +319,7 @@ function CrewPanel({ rounds }: { rounds: RoleRound[] }) {
         </div>
       </div>
       <div className="profile-kpi-grid">
-        <KpiCard label="Average CCI" value={formatMetric(cciAvg, 2, 'A')} note="Saved Crew current after CCI card base × MSE × semantics. Stable Crew stays high." tone="green" />
+        <KpiCard label="Average CCI" value={formatMetric(cciAvg, 2, 'A')} note="Saved Crew current after CCI cards × (MSE + semantics decimal). Stable Crew stays high." tone="green" />
         <KpiCard label="Average CPD" value={formatMetric(cpdAvg, 1, 'V')} note="Blue outcome: final saved CCI × Captain resistance." tone="blue" />
         <KpiCard label="Static stability" value={formatPercent(stabilityIndex)} note="Consistency score from CCI variation and reaction-delay variation." />
         <KpiCard label="CPD coverage ceiling" value={`${cpdCeiling.toFixed(0)}Ω`} note={`Highest CVR where Crew still passed (>${CREW_PASS_THRESHOLD}%). ${formatPercent(answerableRate)} overall pass rate.`} tone="red" />

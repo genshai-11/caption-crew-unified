@@ -81,6 +81,75 @@ async function waitForCaptainTranscript(params: {
   return '';
 }
 
+type RoundWinnerRole = 'captain' | 'crew';
+
+function buildRoomWinUpdates(params: {
+  roomData: any;
+  winnerRole: RoundWinnerRole;
+  targetPoints: number;
+  swapAfterRoundSetting: boolean;
+}) {
+  const { roomData, winnerRole, targetPoints, swapAfterRoundSetting } = params;
+  const captainScore = Number(roomData?.captainScore || 0);
+  const crewScore = Number(roomData?.crewScore || 0);
+  const nextCaptain = winnerRole === 'captain' ? captainScore + 1 : captainScore;
+  const nextCrew = winnerRole === 'crew' ? crewScore + 1 : crewScore;
+  const matchOver = nextCaptain >= targetPoints || nextCrew >= targetPoints;
+  const nextStatus = matchOver ? 'finished' : roomData.status;
+
+  const updates: Record<string, unknown> = {
+    captainScore: nextCaptain,
+    crewScore: nextCrew,
+    status: nextStatus,
+    updatedAt: serverTimestamp(),
+  };
+
+  // Team rotation (only when not yet finished)
+  if (!matchOver && roomData.teamMode) {
+    const teamA: string[] = Array.isArray(roomData.teamA) ? roomData.teamA : [];
+    const teamB: string[] = Array.isArray(roomData.teamB) ? roomData.teamB : [];
+    const teamANames: string[] = Array.isArray(roomData.teamANames) ? roomData.teamANames : [];
+    const teamBNames: string[] = Array.isArray(roomData.teamBNames) ? roomData.teamBNames : [];
+
+    const shouldSwap = roomData.swapAfterRound ?? swapAfterRoundSetting;
+
+    if (shouldSwap) {
+      // Full swap: Team A ↔ Team B
+      const newAIndex = typeof roomData.teamBIndex === 'number' ? roomData.teamBIndex : 0;
+      const newBIndex = typeof roomData.teamAIndex === 'number' ? roomData.teamAIndex : 0;
+      updates.teamA = teamB;
+      updates.teamB = teamA;
+      updates.teamANames = teamBNames;
+      updates.teamBNames = teamANames;
+      updates.teamAIndex = newAIndex;
+      updates.teamBIndex = newBIndex;
+      updates.captainId = teamB[newAIndex] || roomData.captainId;
+      updates.captainName = teamBNames[newAIndex] || roomData.captainName;
+      updates.crewId = teamA[newBIndex] || roomData.crewId;
+      updates.crewName = teamANames[newBIndex] || roomData.crewName;
+    } else {
+      // Rotate active player within each team
+      const nextAIndex = teamA.length > 1
+        ? (Number(roomData.teamAIndex || 0) + 1) % teamA.length
+        : Number(roomData.teamAIndex || 0);
+      const nextBIndex = teamB.length > 1
+        ? (Number(roomData.teamBIndex || 0) + 1) % teamB.length
+        : Number(roomData.teamBIndex || 0);
+      updates.teamAIndex = nextAIndex;
+      updates.teamBIndex = nextBIndex;
+      if (teamA[nextAIndex]) {
+        updates.captainId = teamA[nextAIndex];
+        updates.captainName = teamANames[nextAIndex] || null;
+      }
+      if (teamB[nextBIndex]) {
+        updates.crewId = teamB[nextBIndex];
+        updates.crewName = teamBNames[nextBIndex] || null;
+      }
+    }
+  }
+
+  return updates;
+}
 
 export function useRoomGame(params: {
   roomId: string;
@@ -98,6 +167,10 @@ export function useRoomGame(params: {
   const targetPoints = scoring.targetPoints;
   const mseCoefficient = scoring.mseCoefficient;
   const cvrTargetRawUnits = scoring.cvrTargetRawUnits;
+  const cvrMinVolt = scoring.cvrMinVolt;
+  const cvrMaxVolt = scoring.cvrMaxVolt;
+  const enablePerfectCrewBonus = scoring.enablePerfectCrewBonus;
+  const swapAfterRoundSetting = scoring.swapAfterRound;
 
   const captainRecorder = useRoundRecorder();
   const crewRecorder = useRoundRecorder();
@@ -152,21 +225,33 @@ export function useRoomGame(params: {
     if ((crewRemainingMs ?? 1) > 0) return;
 
     const roundRef = doc(db, 'rooms', roomId, 'rounds', currentRound.id);
+    const roomRef = doc(db, 'rooms', roomId);
     void runTransaction(db, async (tx) => {
-      const snap = await tx.get(roundRef);
-      if (!snap.exists()) return;
-      const data = snap.data() as any;
+      const roundSnap = await tx.get(roundRef);
+      if (!roundSnap.exists()) return;
+      const data = roundSnap.data() as any;
       if (data.status !== 'crew_speaking') return;
       if (data.crewStartedAtMs) return;
 
+      const roomSnap = await tx.get(roomRef);
+      if (!roomSnap.exists()) return;
+      const roomData = roomSnap.data() as any;
+      const winnerRole: RoundWinnerRole = 'captain';
+
       tx.update(roundRef, {
         status: 'finished',
-        winnerRole: 'captain',
+        winnerRole,
         endReason: 'crew_timeout',
         crewDeadlineAtMs: crewDeadlineAtMs,
       });
+      tx.update(roomRef, buildRoomWinUpdates({
+        roomData,
+        winnerRole,
+        targetPoints,
+        swapAfterRoundSetting,
+      }));
     });
-  }, [crewDeadlineAtMs, crewRemainingMs, currentRound?.crewStartedAtMs, currentRound?.id, currentRound?.status, isCaptain, roomId]);
+  }, [crewDeadlineAtMs, crewRemainingMs, currentRound?.crewStartedAtMs, currentRound?.id, currentRound?.status, isCaptain, roomId, swapAfterRoundSetting, targetPoints]);
 
   const joinRole = useCallback(
     async (role: 'captain' | 'crew') => {
@@ -468,6 +553,8 @@ export function useRoomGame(params: {
       const reactionDelayMs =
         captainStoppedAtMs && crewStartedAtMs ? Math.max(0, crewStartedAtMs - captainStoppedAtMs) : undefined;
 
+      const cciCards = Math.max(1, Number(ohmResult?.chunkCount || 0));
+
       const metrics = buildRoundMetrics({
         ohmResult,
         evaluation,
@@ -476,45 +563,60 @@ export function useRoomGame(params: {
         mseMeasured: false,
         cvrTargetRawUnits,
         cvrSource,
+        cciCards,
       });
 
-      const threshold = crewWinThreshold;
-      const winnerRole: 'captain' | 'crew' = evaluation.matchScore >= threshold ? 'crew' : 'captain';
+      // --- Win condition evaluation (layered, most specific first) ---
+      const rawVolt = Number(ohmResult?.voltage ?? ohmResult?.totalOhm ?? 0);
+      const semanticPct = evaluation.matchScore;
+
+      let winnerRole: 'captain' | 'crew';
+      let endReason: RoomRoundDoc['endReason'];
+
+      // 1. CVR out-of-range: Captain's prompt too easy or too hard → crew auto-wins
+      if (ohmResult && (rawVolt < cvrMinVolt || rawVolt > cvrMaxVolt)) {
+        winnerRole = 'crew';
+        endReason = 'cvr_out_of_range';
+      // 2. Perfect crew: 100% semantic and MSE ≥ 1 → crew auto-wins
+      } else if (enablePerfectCrewBonus && semanticPct >= 100 && mseCoefficient >= 1) {
+        winnerRole = 'crew';
+        endReason = 'perfect_crew';
+      // 3. Normal CPD threshold
+      } else {
+        winnerRole = semanticPct >= crewWinThreshold ? 'crew' : 'captain';
+        endReason = 'meaning';
+      }
 
       await updateDoc(roundRef, {
-        meaningScore: evaluation.matchScore,
+        meaningScore: semanticPct,
         feedback: evaluation.reason,
         meaningAnalysis: evaluation,
         ohmResult: ohmResult || null,
         metrics,
         reactionDelayMs: reactionDelayMs ?? null,
         winnerRole,
-        endReason: 'meaning',
+        endReason,
         status: 'finished',
       });
 
-      // Increment room scoreboard
+      // --- Scoreboard + team rotation transaction ---
       await runTransaction(db, async (tx) => {
         const roomRef = doc(db, 'rooms', roomId);
         const snap = await tx.get(roomRef);
         if (!snap.exists()) return;
-        const data = snap.data() as any;
-        const captainScore = Number(data?.captainScore || 0);
-        const crewScore = Number(data?.crewScore || 0);
-        const nextCaptain = winnerRole === 'captain' ? captainScore + 1 : captainScore;
-        const nextCrew = winnerRole === 'crew' ? crewScore + 1 : crewScore;
-        const nextStatus = (nextCaptain >= targetPoints || nextCrew >= targetPoints) ? 'finished' : data.status;
-        tx.update(roomRef, {
-          captainScore: nextCaptain,
-          crewScore: nextCrew,
-          status: nextStatus,
-          updatedAt: serverTimestamp(),
-        });
+        const roomData = snap.data() as any;
+
+        tx.update(roomRef, buildRoomWinUpdates({
+          roomData,
+          winnerRole,
+          targetPoints,
+          swapAfterRoundSetting,
+        }));
       });
     } finally {
       setProcessing(false);
     }
-  }, [crewRecorder, currentRound, roomId, crewWinThreshold, targetPoints, mseCoefficient, cvrTargetRawUnits]);
+  }, [crewRecorder, currentRound, roomId, crewWinThreshold, targetPoints, mseCoefficient, cvrTargetRawUnits, cvrMinVolt, cvrMaxVolt, enablePerfectCrewBonus, swapAfterRoundSetting]);
 
   return {
     user,

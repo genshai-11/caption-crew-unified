@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Hand, RefreshCw, Users, Waves, X } from 'lucide-react';
+import { BarChart3, Hand, RefreshCw, Users, Waves, X } from 'lucide-react';
 import { RolePanel } from '@/components/RolePanel';
 import { useRoundContext } from '@/context/RoundContext';
+import { loadCachedRounds } from '@/services/roundRepository';
+import type { RoundRecord } from '@/types';
 
 function CciCardGlyph({ icon }: { icon: string }) {
   if (icon === 'hand') return <Hand size={16} />;
@@ -24,6 +26,31 @@ function formatCountdown(ms: number | null) {
   return `${(ms / 1000).toFixed(1)}s left`;
 }
 
+const TEAM_ANALYSIS_SINCE_KEY = 'caption-crew-team-analysis-since';
+
+function loadTeamAnalysisSince() {
+  try {
+    const value = Number(sessionStorage.getItem(TEAM_ANALYSIS_SINCE_KEY) || 0);
+    return Number.isFinite(value) ? value : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveTeamAnalysisSince(value: number) {
+  try {
+    sessionStorage.setItem(TEAM_ANALYSIS_SINCE_KEY, String(value));
+  } catch {
+    // ignore
+  }
+}
+
+function formatMetric(value: unknown, digits = 2) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '—';
+  return Number(numeric.toFixed(digits)).toString();
+}
+
 function getOverlayCopy(state: string) {
   if (state === 'crew-processing') {
     return { title: 'finalizing live transcript', subtitle: 'wrapping up the last spoken words before analysis starts' };
@@ -42,6 +69,9 @@ export default function GamePage() {
   const [crewInput, setCrewInput] = useState('');
   const [editingLearners, setEditingLearners] = useState(false);
   const [cciMenuOpen, setCciMenuOpen] = useState(false);
+  const [scoreSummaryOpen, setScoreSummaryOpen] = useState(false);
+  const [historyRounds, setHistoryRounds] = useState<RoundRecord[]>(() => loadCachedRounds());
+  const [teamAnalysisSinceMs, setTeamAnalysisSinceMs] = useState(() => loadTeamAnalysisSince());
 
   useEffect(() => {
     setCaptainInput(round.captainName || '');
@@ -57,6 +87,75 @@ export default function GamePage() {
   useEffect(() => {
     if (round.state !== 'captain-ready') setCciMenuOpen(false);
   }, [round.state]);
+
+  useEffect(() => {
+    if (scoreSummaryOpen) setHistoryRounds(loadCachedRounds());
+  }, [scoreSummaryOpen]);
+
+  const teamAnalysis = useMemo(() => {
+    const teamAName = round.captainName || 'Team A';
+    const teamBName = round.crewName || 'Team B';
+    const sameName = (a?: string | null, b?: string | null) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+    const rowFromRound = (entry: RoundRecord, index: number) => {
+      const teamARole = sameName(entry.captainName, teamAName) ? 'Captain' : sameName(entry.crewName, teamAName) ? 'Crew' : '—';
+      const teamBRole = sameName(entry.captainName, teamBName) ? 'Captain' : sameName(entry.crewName, teamBName) ? 'Crew' : '—';
+      const meaning = Number(entry.metrics?.cci.llmMeaningPercent ?? entry.evaluation?.matchScore ?? 0);
+      const cvr = Number(entry.metrics?.cvr.rawUnits ?? entry.ohmResult?.totalOhm ?? 0);
+      const cci = Number(entry.metrics?.cci.current ?? entry.metrics?.cci.score ?? 0);
+      const cpd = Number(entry.metrics?.cpd.raw ?? entry.metrics?.cpd.score ?? 0);
+      const teamAValue = teamARole === 'Crew' ? cpd : teamARole === 'Captain' ? cvr : 0;
+      const teamBValue = teamBRole === 'Crew' ? cpd : teamBRole === 'Captain' ? cvr : 0;
+      return {
+        id: entry.id || `round-${index}`,
+        label: `R${index + 1}`,
+        teamARole,
+        teamBRole,
+        teamAValue,
+        teamBValue,
+        cvr,
+        cci,
+        cpd,
+        meaning,
+        mse: Number(entry.metrics?.cci.mse.coefficient ?? 0),
+        card: entry.metrics?.cci.card?.label || 'CCI card',
+      };
+    };
+
+    const matchingHistory = historyRounds
+      .filter((entry) => {
+        const createdAtMs = Date.parse(entry.createdAt || '');
+        const isAfterReset = !teamAnalysisSinceMs || (Number.isFinite(createdAtMs) && createdAtMs >= teamAnalysisSinceMs);
+        return isAfterReset &&
+          (sameName(entry.captainName, teamAName) || sameName(entry.crewName, teamAName)) &&
+          (sameName(entry.captainName, teamBName) || sameName(entry.crewName, teamBName));
+      });
+
+    const currentRound: RoundRecord | null = round.metrics ? {
+      id: 'current-preview-round',
+      createdAt: new Date().toISOString(),
+      state: 'results',
+      captainName: round.captainName || null,
+      crewName: round.crewName || null,
+      metrics: round.metrics,
+      evaluation: round.evaluation || undefined,
+      ohmResult: round.ohmResult || undefined,
+      reactionDelayMs: round.reactionDelayMs || undefined,
+      timeoutLost: false,
+    } as RoundRecord : null;
+
+    const sourceRounds = [
+      ...(currentRound ? [currentRound] : []),
+      ...matchingHistory.filter((entry) => entry.id !== currentRound?.id),
+    ].slice(0, 8);
+    const rows = sourceRounds.map(rowFromRound);
+    const teamACpd = rows.filter((row) => row.teamARole === 'Crew').reduce((sum, row) => sum + row.cpd, 0);
+    const teamBCpd = rows.filter((row) => row.teamBRole === 'Crew').reduce((sum, row) => sum + row.cpd, 0);
+    const teamACvr = rows.filter((row) => row.teamARole === 'Captain').reduce((sum, row) => sum + row.cvr, 0);
+    const teamBCvr = rows.filter((row) => row.teamBRole === 'Captain').reduce((sum, row) => sum + row.cvr, 0);
+    const winnerName = teamACpd === teamBCpd ? 'Tie' : teamACpd > teamBCpd ? teamAName : teamBName;
+
+    return { teamAName, teamBName, rows, teamACpd, teamBCpd, teamACvr, teamBCvr, winnerName, sinceMs: teamAnalysisSinceMs };
+  }, [historyRounds, round.captainName, round.crewName, round.evaluation, round.metrics, round.ohmResult, round.reactionDelayMs, teamAnalysisSinceMs]);
 
   const canEditLearners = round.state === 'captain-ready';
   const canEndRound = round.rolesConfigured && round.state !== 'captain-ready';
@@ -147,7 +246,10 @@ export default function GamePage() {
               <button
                 type="button"
                 className="ghost-pill-button cci-card-trigger"
-                onClick={() => setCciMenuOpen((prev) => !prev)}
+                onClick={() => {
+                  setScoreSummaryOpen(false);
+                  setCciMenuOpen((prev) => !prev);
+                }}
                 disabled={!canEditLearners}
                 title={`${round.selectedCciCard.label} · ${round.selectedCciCard.baseA}A`}
                 aria-label={`Selected CCI card ${round.selectedCciCard.label} ${round.selectedCciCard.baseA}A`}
@@ -156,6 +258,91 @@ export default function GamePage() {
                 <span className="cci-card-option-icon" aria-hidden="true"><CciCardGlyph icon={round.selectedCciCard.icon} /></span>
                 <span className="cci-card-trigger-badge">{round.selectedCciCard.baseA}A</span>
               </button>
+              <button
+                type="button"
+                className="ghost-pill-button icon-only-button team-score-trigger"
+                onClick={() => {
+                  setCciMenuOpen(false);
+                  setScoreSummaryOpen((prev) => !prev);
+                }}
+                title="Team score summary"
+                aria-label="Open team score summary"
+                aria-expanded={scoreSummaryOpen}
+              >
+                <BarChart3 size={18} />
+              </button>
+              {scoreSummaryOpen && (
+                <div className="team-score-popover" role="dialog" aria-label="Team score summary">
+                  <div className="team-score-winner-strip">
+                    <span className="soft-label">Winner by Crew CPD sum</span>
+                    <strong>{teamAnalysis.winnerName}</strong>
+                  </div>
+                  <div className="team-score-popover-grid">
+                    <div className="team-score-mini team-score-mini-captain">
+                      <span className="soft-label">{teamAnalysis.teamAName}</span>
+                      <strong>{formatMetric(teamAnalysis.teamACpd, 2)}V CPD</strong>
+                      <p className="team-score-role-note team-score-role-crew">Crew turns score CPD</p>
+                      <p className="team-score-role-note team-score-role-captain">Captain CVR sum: {formatMetric(teamAnalysis.teamACvr, 2)}Ω</p>
+                    </div>
+                    <div className="team-score-mini team-score-mini-crew">
+                      <span className="soft-label">{teamAnalysis.teamBName}</span>
+                      <strong>{formatMetric(teamAnalysis.teamBCpd, 2)}V CPD</strong>
+                      <p className="team-score-role-note team-score-role-crew">Crew turns score CPD</p>
+                      <p className="team-score-role-note team-score-role-captain">Captain CVR sum: {formatMetric(teamAnalysis.teamBCvr, 2)}Ω</p>
+                    </div>
+                  </div>
+                  <div className="team-score-card-analysis">
+                    <span className="soft-label">Card analysis rule</span>
+                    <strong>Higher sum CPD = winner</strong>
+                    <p><b>Captain / Hitter:</b> creates Initial CVR (Ω). Auto lose if CVR is outside the valid 1–50Ω range.</p>
+                    <p><b>Crew / Thrower & catcher:</b> creates Real CCI (A) = (Semantics% + MSE%) × fixed CCI card.</p>
+                    <p><b>Round CPD:</b> Initial CVR × Real CCI = CPD (V). Team totals compare summed CPD from Crew turns.</p>
+                    <p><b>Auto win:</b> Semantics = 100% and MSE = 100%. Auto win/lose is checked per player, then affects the team total.</p>
+                    <p>Fixed CCI card: {round.metrics?.cci.card?.label || round.selectedCciCard.label} · {round.metrics?.cci.card?.baseA ?? round.selectedCciCard.baseA}A · MSE {round.metrics?.cci.mse.coefficient ?? '—'} · Semantics {round.metrics?.cci.llmMeaningPercent != null ? `${round.metrics.cci.llmMeaningPercent}% → ${formatMetric(round.metrics.cci.llmMeaningPercent / 100, 4)}` : '—'}</p>
+                  </div>
+                  <div className="action-row team-score-actions">
+                    <button
+                      type="button"
+                      className="primary-pill-button team-score-new-round"
+                      onClick={() => {
+                        const nextSince = Date.now();
+                        saveTeamAnalysisSince(nextSince);
+                        setTeamAnalysisSinceMs(nextSince);
+                        setHistoryRounds([]);
+                        round.resetRound({ preserveSelectedCciCard: true });
+                        setScoreSummaryOpen(false);
+                        setCciMenuOpen(false);
+                      }}
+                    >
+                      <RefreshCw size={14} aria-hidden="true" />
+                      New round — same teams
+                    </button>
+                  </div>
+                  <div className="team-round-detail-list">
+                    <span className="soft-label">Round details</span>
+                    {teamAnalysis.rows.length === 0 ? (
+                      <p className="admin-message">Round details were reset for this same-team session. Finish the next round to see fresh Team A/B CPD, role, CVR, CCI and CPD details.</p>
+                    ) : teamAnalysis.rows.map((entry) => (
+                      <div key={entry.id} className="team-round-detail-row">
+                        <strong>{entry.label}</strong>
+                        <div className="team-round-role-grid">
+                          <div className={`team-round-role-card ${entry.teamARole === 'Captain' ? 'is-captain' : entry.teamARole === 'Crew' ? 'is-crew' : ''}`}>
+                            <span>{teamAnalysis.teamAName}</span>
+                            <strong>{entry.teamARole}</strong>
+                            <p>{entry.teamARole === 'Crew' ? `CPD ${formatMetric(entry.cpd, 2)}V` : entry.teamARole === 'Captain' ? `CVR ${formatMetric(entry.cvr, 2)}Ω` : '—'}</p>
+                          </div>
+                          <div className={`team-round-role-card ${entry.teamBRole === 'Captain' ? 'is-captain' : entry.teamBRole === 'Crew' ? 'is-crew' : ''}`}>
+                            <span>{teamAnalysis.teamBName}</span>
+                            <strong>{entry.teamBRole}</strong>
+                            <p>{entry.teamBRole === 'Crew' ? `CPD ${formatMetric(entry.cpd, 2)}V` : entry.teamBRole === 'Captain' ? `CVR ${formatMetric(entry.cvr, 2)}Ω` : '—'}</p>
+                          </div>
+                        </div>
+                        <p>CCI {formatMetric(entry.cci, 4)}A · Semantics {formatMetric(entry.meaning, 2)}% · MSE {formatMetric(entry.mse, 2)} · Card {entry.card}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {cciMenuOpen && canEditLearners && (
                 <div className="cci-card-popover" role="menu" aria-label="CCI card selector">
                   {round.availableCciCards.map((card) => {

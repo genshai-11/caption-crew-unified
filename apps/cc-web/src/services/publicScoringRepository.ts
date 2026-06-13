@@ -2,10 +2,17 @@ import { doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 
 export interface PublicScoringSettings {
-  crewWinThreshold: number; // 0-100
-  targetPoints: number; // 1-20
-  mseCoefficient: number; // CCI = LLM meaning % x MSE
-  cvrTargetRawUnits: number; // raw CVR units that map to 100 for UI comparison
+  crewWinThreshold: number;     // 0-100: CPD threshold for crew to win a round
+  targetPoints: number;         // 1-20: points needed to win the match
+  mseCoefficient: number;       // CCI MSE multiplier (default 1, evaluator-entered)
+  cvrTargetRawUnits: number;    // raw CVR units that map to 100 for UI comparison
+  // Team faceoff settings
+  teamMode: boolean;            // enable team roster mode (dynamic size)
+  cvrMinVolt: number;           // min valid CVR voltage — below this = too easy → crew auto-wins
+  cvrMaxVolt: number;           // max valid CVR voltage — above this = out of range → crew auto-wins
+  enablePerfectCrewBonus: boolean; // 100% semantic + MSE ≥1 → crew auto-wins
+  swapAfterRound: boolean;      // swap Captain/Crew team roles after each round
+  maxTeamSize: number;          // max players per team slot (dynamic, 1–50)
 }
 
 const SCORING_DOC = ['game_settings', 'scoring'] as const;
@@ -16,6 +23,12 @@ export const defaultPublicScoringSettings: PublicScoringSettings = {
   targetPoints: 3,
   mseCoefficient: 1,
   cvrTargetRawUnits: 120,
+  teamMode: false,
+  cvrMinVolt: 1,
+  cvrMaxVolt: 50,
+  enablePerfectCrewBonus: true,
+  swapAfterRound: false,
+  maxTeamSize: 10,
 };
 
 function clampInt(value: any, min: number, max: number, fallback: number) {
@@ -34,8 +47,14 @@ function normalize(raw?: Partial<PublicScoringSettings> | null): PublicScoringSe
   return {
     crewWinThreshold: clampInt(raw?.crewWinThreshold, 0, 100, defaultPublicScoringSettings.crewWinThreshold),
     targetPoints: clampInt(raw?.targetPoints, 1, 20, defaultPublicScoringSettings.targetPoints),
-    mseCoefficient: clampNumber(raw?.mseCoefficient, 0, 5, defaultPublicScoringSettings.mseCoefficient),
+    mseCoefficient: clampNumber(raw?.mseCoefficient, 0, 10, defaultPublicScoringSettings.mseCoefficient),
     cvrTargetRawUnits: clampNumber(raw?.cvrTargetRawUnits, 1, 1000, defaultPublicScoringSettings.cvrTargetRawUnits),
+    teamMode: Boolean(raw?.teamMode ?? defaultPublicScoringSettings.teamMode),
+    cvrMinVolt: clampNumber(raw?.cvrMinVolt, 0, 999, defaultPublicScoringSettings.cvrMinVolt),
+    cvrMaxVolt: clampNumber(raw?.cvrMaxVolt, 1, 9999, defaultPublicScoringSettings.cvrMaxVolt),
+    enablePerfectCrewBonus: Boolean(raw?.enablePerfectCrewBonus ?? defaultPublicScoringSettings.enablePerfectCrewBonus),
+    swapAfterRound: Boolean(raw?.swapAfterRound ?? defaultPublicScoringSettings.swapAfterRound),
+    maxTeamSize: clampInt(raw?.maxTeamSize, 1, 50, defaultPublicScoringSettings.maxTeamSize),
   };
 }
 

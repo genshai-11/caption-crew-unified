@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { ResultCard } from '@/components/ResultCard';
 import { useRoundContext } from '@/context/RoundContext';
 import { resolveCrewResponseCoefficient } from '@/hooks/useCaptionCrewRound';
-import { OhmChunkResult, RoundMetrics, TranscriptResult } from '@/types';
+import { MeaningEvaluation, OhmChunkResult, RoundMetrics, TranscriptResult } from '@/types';
 
 function formatConfidence(confidence?: number) {
   if (typeof confidence !== 'number' || Number.isNaN(confidence) || confidence <= 0) return '—';
@@ -41,6 +40,76 @@ function MetricLoadingValue({ className = '', text = 'đang tính…' }: { class
   );
 }
 
+function formatScorePercent(score?: number | null) {
+  const numeric = Number(score ?? 0);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.min(100, Math.round(numeric)));
+}
+
+function DetailList({ title, items }: { title: string; items?: string[] }) {
+  if (!items?.length) return null;
+  return (
+    <div className="analysis-detail-block">
+      <span className="metric-label">{title}</span>
+      <ul className="analysis-detail-list">
+        {items.map((item) => <li key={`${title}-${item}`}>{item}</li>)}
+      </ul>
+    </div>
+  );
+}
+
+function SummaryResultOnly({ evaluation, reactionDelayMs }: { evaluation: MeaningEvaluation; reactionDelayMs: number | null }) {
+  const scorePercent = formatScorePercent(evaluation.matchScore);
+  return (
+    <section className="analysis-card">
+      <div className="analysis-topline">
+        <span className="analysis-label">CCI meaning analysis</span>
+        <span className={`analysis-pill decision-${evaluation.decision}`}>{evaluation.decision}</span>
+      </div>
+      <div className="analysis-score-block">
+        <div className="analysis-score" aria-label={`meaning match ${scorePercent} percent`}>
+          <span>{scorePercent}</span><span className="analysis-score-unit">%</span>
+        </div>
+        <div className="analysis-caption">LLM meaning % · MSE applied in CCI metric</div>
+      </div>
+      <div className="analysis-metrics">
+        <div>
+          <span className="metric-label">response delay</span>
+          <span className="metric-value">{reactionDelayMs != null ? `${(reactionDelayMs / 1000).toFixed(2)}s` : '—'}</span>
+        </div>
+        <div>
+          <span className="metric-label">feedback mode</span>
+          <span className="metric-value">{evaluation.feedbackType || 'off'}</span>
+        </div>
+      </div>
+      <div className="analysis-detail-block">
+        <span className="metric-label">summary</span>
+        <p className="analysis-reason">{evaluation.reason}</p>
+      </div>
+      <div className="analysis-grid-two-up">
+        <DetailList title="missing meaning" items={evaluation.missingConcepts} />
+        <DetailList title="extra meaning" items={evaluation.extraConcepts} />
+      </div>
+      {(evaluation.grammarNote || evaluation.improvedTranscript) && (
+        <div className="analysis-grid-two-up">
+          {evaluation.grammarNote && (
+            <div className="analysis-detail-block">
+              <span className="metric-label">clarity note</span>
+              <p className="analysis-reason">{evaluation.grammarNote}</p>
+            </div>
+          )}
+          {evaluation.improvedTranscript && (
+            <div className="analysis-detail-block">
+              <span className="metric-label">suggested English</span>
+              <p className="analysis-reason">{evaluation.improvedTranscript}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function SummaryOhmCard({
   totalOhm,
   current,
@@ -70,10 +139,10 @@ function SummaryOhmCard({
   const denominator = Math.max(estimatedTC * lc * responseCoefficient * repeatCoefficient, 0.0001);
   const tl = metrics?.cvr.tensionLoad ?? (cvr > 0 && estimatedTC > 0 ? cvr / denominator : 1);
   const meaningPercent = metrics?.cci.llmMeaningPercent ?? 0;
-  const meaningDecimal = meaningPercent / 100;
+  const semanticsDecimal = meaningPercent / 100;
   const cardBaseA = metrics?.cci.card?.baseA ?? 10;
   const cardLabel = metrics?.cci.card?.label || '1-on-1';
-  const cciCurrent = cardBaseA * meaningDecimal * Math.max(0, Number(mseCoefficient || 0));
+  const cciCurrent = cardBaseA * (Math.max(0, Number(mseCoefficient || 0)) + semanticsDecimal);
   const cpd = cciCurrent * cvr;
 
   useEffect(() => {
@@ -119,10 +188,10 @@ function SummaryOhmCard({
 
       <div className="analysis-metrics summary-inline-metrics">
         <div className="metric-primary-cci">
-          <span className="metric-label metric-title metric-cci">CCI ({metrics?.cci.unit || 'A'}) = CCI cards × MSE × Semantics</span>
+          <span className="metric-label metric-title metric-cci">CCI ({metrics?.cci.unit || 'A'}) = CCI cards × (MSE + Semantics decimal)</span>
           {hasCciMetric ? (
             <span className="metric-value metric-cci metric-cci-formula">
-              {formatMetricNumber(cardBaseA, 2)} × {formatMetricNumber(Number(mseCoefficient || 0), 2)} × {formatMetricNumber(meaningDecimal, 4)} = {formatMetricNumber(cciCurrent, 4)}{metrics?.cci.unit || 'A'}
+              {formatMetricNumber(cardBaseA, 2)} × ({formatMetricNumber(Number(mseCoefficient || 0), 2)} + {formatMetricNumber(semanticsDecimal, 4)}) = {formatMetricNumber(cciCurrent, 4)}{metrics?.cci.unit || 'A'}
             </span>
           ) : (
             <MetricLoadingValue className="metric-cci" text="đang tính CCI…" />
@@ -135,7 +204,7 @@ function SummaryOhmCard({
             <div className="metric-secondary-cci">
               <span className="metric-label metric-cci">Semantics</span>
               {hasCciMetric ? (
-                <span className="metric-value metric-cci">{formatMetricNumber(meaningPercent)}%</span>
+                <span className="metric-value metric-cci">{formatMetricNumber(meaningPercent)}% → {formatMetricNumber(semanticsDecimal, 4)}</span>
               ) : (
                 <MetricLoadingValue className="metric-cci" text="đang tính Semantics…" />
               )}
@@ -299,18 +368,6 @@ export default function AnalysisSummaryPage() {
       {round.feedbackError && (
         <section className="soft-card admin-section-minimal">
           <p className="game-error summary-error">{round.feedbackError}</p>
-          <div className="action-row">
-            <button
-              type="button"
-              className="primary-pill-button"
-              onClick={() => {
-                round.resetRound();
-                navigate('/', { replace: true });
-              }}
-            >
-              Back to game
-            </button>
-          </div>
         </section>
       )}
 
@@ -345,13 +402,9 @@ export default function AnalysisSummaryPage() {
       )}
 
       {round.evaluation ? (
-        <ResultCard
+        <SummaryResultOnly
           evaluation={round.evaluation}
           reactionDelayMs={round.reactionDelayMs}
-          onReset={() => {
-            round.resetRound();
-            navigate('/', { replace: true });
-          }}
         />
       ) : !round.feedbackError && (
         <section className="soft-card admin-section-minimal analysis-loading-card">
@@ -364,6 +417,19 @@ export default function AnalysisSummaryPage() {
           <p className="analysis-overlay-subtitle">CCI · CPD đang được tính toán</p>
         </section>
       )}
+
+      <section className="summary-try-again-row">
+        <button
+          type="button"
+          className="primary-pill-button summary-try-again-button"
+          onClick={() => {
+            round.resetRound({ preserveSelectedCciCard: true });
+            navigate('/', { replace: true });
+          }}
+        >
+          Play again
+        </button>
+      </section>
     </main>
   );
 }

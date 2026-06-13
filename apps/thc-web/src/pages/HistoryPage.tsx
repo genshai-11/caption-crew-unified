@@ -260,7 +260,7 @@ function HistoryCard({ round }: { round: RoundRecord }) {
             <span className="metric-label">CCI meaning analysis</span>
             <p className="analysis-reason">{round.evaluation?.reason || 'No evaluation summary available.'}</p>
             {round.metrics?.cci && (
-              <p className="admin-message">Saved formula: {round.metrics.cci.card?.label || '1-on-1'} ({formatMetricValue(round.metrics.cci.card?.baseA, 1)}A) × MSE {formatMetricValue(round.metrics.cci.mse.coefficient, 1)} × Semantics {formatMetricValue((round.metrics.cci.llmMeaningPercent || 0) / 100, 1)} = {formatMetricValue(round.metrics.cci.current, 1)}A.</p>
+              <p className="admin-message">Saved formula: {round.metrics.cci.card?.label || '1-on-1'} ({formatMetricValue(round.metrics.cci.card?.baseA, 1)}A) × (MSE {formatMetricValue(round.metrics.cci.mse.coefficient, 1)} + Semantics decimal {formatMetricValue((round.metrics.cci.llmMeaningPercent || 0) / 100, 2)}) = {formatMetricValue(round.metrics.cci.current, 1)}A.</p>
             )}
           </div>
 

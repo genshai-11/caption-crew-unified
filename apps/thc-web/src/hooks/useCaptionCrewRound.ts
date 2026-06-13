@@ -394,7 +394,7 @@ export function useCaptionCrewRound() {
   }, [persistRoleSetup, resetRound]);
 
   const endRound = useCallback(() => {
-    resetRound();
+    resetRound({ preserveSelectedCciCard: true });
   }, [resetRound]);
 
   const startCaptain = useCallback(async () => {
